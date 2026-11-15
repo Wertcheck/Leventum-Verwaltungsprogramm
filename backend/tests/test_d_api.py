@@ -43,8 +43,8 @@ def world(auth_client):
 
 def test_charges_payments_and_economics_over_http(world):
     c = world["c"]
-    g = post(c, "/charges/generate", {"from_month": "2026-01-01", "through_month": "2026-02-01"})
-    assert g["created_count"] == 8 and post(c, "/charges/generate", {"from_month": "2026-01-01", "through_month": "2026-02-01"})["created_count"] == 0
+    g = post(c, "/charges/generate", {"allow_backdated": True, "from_month": "2026-01-01", "through_month": "2026-02-01"})
+    assert g["created_count"] == 8 and post(c, "/charges/generate", {"allow_backdated": True, "from_month": "2026-01-01", "through_month": "2026-02-01"})["created_count"] == 0
     rent = next(x for x in c.get(V + f"/charges?lease_id={world['sub']['id']}").json()["items"] if x["charge_type"] == "base_rent" and x["period_start"] == "2026-01-01")
     assert rent["amount"] == "1150.00" and rent["open_amount"] == "1150.00" and rent["status"] == "open"
     p = post(c, "/payments", {"direction": "in", "booking_date": "2026-01-05", "amount": "400.00", "allocations": [{"charge_id": rent["id"], "amount": "400.00"}]})
@@ -64,7 +64,7 @@ def test_charges_payments_and_economics_over_http(world):
 
 def test_dunning_flow_requires_manual_steps_over_http(world):
     c = world["c"]
-    post(c, "/charges/generate", {"from_month": "2026-01-01", "through_month": "2026-01-01"})
+    post(c, "/charges/generate", {"allow_backdated": True, "from_month": "2026-01-01", "through_month": "2026-01-01"})
     od = c.get(V + "/dunning/overdue?as_of=2026-02-10").json()
     assert len(od["items"]) == 2 and "kein automatischer Versand" in od["note"] and "nicht berechnet" in od["note"]
     n = post(c, "/dunning/prepare", {"as_of": "2026-02-10"})["created"][0]
@@ -81,7 +81,7 @@ def test_dunning_flow_requires_manual_steps_over_http(world):
 
 def test_bank_import_confirm_flow_over_http(world):
     c = world["c"]
-    post(c, "/charges/generate", {"from_month": "2026-01-01", "through_month": "2026-01-01"})
+    post(c, "/charges/generate", {"allow_backdated": True, "from_month": "2026-01-01", "through_month": "2026-01-01"})
     acc = post(c, "/bank/accounts", {"name": "Geschäftskonto"})
     csv = f"Buchungstag;Name;IBAN;Verwendungszweck;Betrag\n02.01.2026;Max Mustermann;{IBAN};Miete Januar;1.370,00\n03.01.2026;Fremd;;Spende;-5,00\n".encode()
     files = {"file": ("auszug.csv", csv, "text/csv")}
@@ -137,6 +137,6 @@ def test_read_only_role_cannot_book_or_confirm(world, app):
     r = TestClient(app, headers={"X-Leventum-Client": "1"})
     assert r.post(V + "/auth/login", json={"username": "leser", "password": PW}).status_code == 200
     assert r.get(V + "/charges").status_code == 200 and r.get(V + "/economics?start=2026-01-01&end=2026-01-31").status_code == 200
-    for path, body in (("/charges/generate", {"from_month": "2026-01-01", "through_month": "2026-01-01"}), ("/payments", {"direction": "in", "booking_date": "2026-01-01", "amount": "1.00"}),
+    for path, body in (("/charges/generate", {"allow_backdated": True, "from_month": "2026-01-01", "through_month": "2026-01-01"}), ("/payments", {"direction": "in", "booking_date": "2026-01-01", "amount": "1.00"}),
                        ("/bank/transactions/1/confirm", {"confirm": True}), ("/dunning/prepare", {}), ("/deposits", {"lease_id": 1, "agreed_amount": "1.00"})):
         assert r.post(V + path, json=body).status_code == 403, path

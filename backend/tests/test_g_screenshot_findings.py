@@ -70,7 +70,7 @@ def test_status_texts_in_history_are_german(w):
 
 def test_tenants_api_shows_payment_status_and_arrears_filter(world):  # noqa: F811
     c = world["c"]
-    post(c, "/charges/generate", {"from_month": "2026-01-01", "through_month": "2026-01-01"})
+    post(c, "/charges/generate", {"allow_backdated": True, "from_month": "2026-01-01", "through_month": "2026-01-01"})
     row = c.get(V + "/tenants").json()["items"][0]
     assert row["payment_status"] == "arrears" and row["overdue_amount"] == "1370.00"
     assert [r["name"] for r in c.get(V + "/tenants?status=arrears").json()["items"]] == ["Max Mustermann"]

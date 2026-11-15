@@ -57,11 +57,21 @@ def charges_list(lease_id: int | None = None, direction: str | None = None, stat
     return {"items": rows}
 
 
+@router.post("/charges/preview", dependencies=[FR])
+def charges_preview(body: S.ChargeGenerateIn, db: Session = Depends(get_db)):
+    """Vorschau ohne Schreiben: was würde erzeugt, was existiert, welche Konflikte/Fehler gibt es."""
+    r = C.generate_charges(db, None, from_month=body.from_month.replace(day=1), through_month=body.through_month.replace(day=1), lease_id=body.lease_id, dry_run=True)
+    for x in r["would_create"]:
+        x["lease_label"] = M.lease_title(db, db.get(Lease, x["lease_id"]))
+    return js(r)
+
+
 @router.post("/charges/generate", dependencies=[FW])
 def charges_generate(body: S.ChargeGenerateIn, db: Session = Depends(get_db), user: AppUser = Depends(current_user)):
-    r = C.generate_charges(db, user.id, from_month=body.from_month.replace(day=1), through_month=body.through_month.replace(day=1), lease_id=body.lease_id)
+    r = C.generate_charges(db, user.id, from_month=body.from_month.replace(day=1), through_month=body.through_month.replace(day=1), lease_id=body.lease_id,
+                           forbid_backdated=not body.allow_backdated)
     db.commit()
-    return js(r)
+    return js({k: v for k, v in r.items() if k != "would_create"})
 
 
 @router.post("/charges", dependencies=[FW], status_code=201)

@@ -74,10 +74,41 @@ def open_amount(db: Session, charge: Charge, as_of: date | None = None) -> Decim
     return q(charge.amount - allocated(db, charge.id, as_of))
 
 
+def period_months(rhythm: str, first_month: date, through_month: date):
+    """Kalenderbasierte Abrechnungsperioden, die im Bereich [first_month, through_month] BEGINNEN: (Startmonat, Anzahl Monate).
+    Quartale beginnen im Jan/Apr/Jul/Okt, Halbjahre im Jan/Jul, Jahre im Januar (Annahme, siehe docs)."""
+    n = domain.RHYTHM_MONTHS[rhythm]
+    for y, m in month_range(first_month, through_month):
+        if (m - 1) % n == 0:
+            yield y, m, n
+
+
+def _period_end(y: int, m: int, n: int) -> date:
+    ey, em = (y + (m - 1 + n - 1) // 12), (m - 1 + n - 1) % 12 + 1
+    return date(ey, em, monthrange(ey, em)[1])
+
+
+def period_amounts(lease: Lease, y: int, m: int, n: int) -> dict[str, Decimal]:
+    """Summe der (je Monat tagesanteilig gerundeten) Monatsbeträge der Periode → identisch zu n einzelnen Monats-Sollstellungen."""
+    acc: dict[str, Decimal] = defaultdict(Decimal)
+    cy, cm = y, m
+    for _ in range(n):
+        for t, v in monthly_components(lease, cy, cm).items():
+            acc[t] += v
+        cy, cm = (cy + 1, 1) if cm == 12 else (cy, cm + 1)
+    return {k: q(v) for k, v in acc.items() if q(v) > 0}
+
+
+def charge_key(lease_id: int, ctype: str, y: int, m: int, n: int) -> str:
+    return f"{lease_id}:{ctype}:{y}-{m:02d}" if n == 1 else f"{lease_id}:{ctype}:{y}-{m:02d}+{n}m"
+
+
 def generate_charges(db: Session, actor_id: int | None, *, from_month: date, through_month: date, lease_id: int | None = None,
-                     today: date | None = None) -> dict:
-    """Erzeugt fehlende Sollstellungen. Idempotent (dedupe_key). Bestehende Sollstellungen werden NIE verändert;
-    weicht der berechnete Betrag ab (z. B. nach Konditionsänderung), wird ein Konflikt gemeldet."""
+                     today: date | None = None, dry_run: bool = False, forbid_backdated: bool = False) -> dict:
+    """Erzeugt fehlende Sollstellungen je Vertragsrhythmus (monatlich, vierteljährlich, halbjährlich, jährlich); fällig am Fälligkeitstag des Periodenbeginns.
+    Idempotent (dedupe_key) und überlappungsgeschützt: Bestehende Sollstellungen werden NIE verändert; abweichende Beträge oder Überschneidungen
+    mit bestehenden Perioden (z. B. nach Rhythmuswechsel) werden als Konflikt gemeldet. `dry_run` schreibt nichts (Vorschau).
+    `forbid_backdated`: rückwirkende Perioden (Ende vor dem aktuellen Monat) werden nur nach ausdrücklicher Bestätigung erzeugt."""
     today = today or date.today()
     if through_month < from_month:
         raise ServiceError("invalid", "Zeitraum ungültig.")
@@ -86,32 +117,62 @@ def generate_charges(db: Session, actor_id: int | None, *, from_month: date, thr
     stmt = select(Lease).where(Lease.status.in_(BILLABLE_STATUS))
     if lease_id:
         stmt = stmt.where(Lease.id == lease_id)
-    created, skipped, conflicts = [], 0, []
+    plan, skipped, conflicts, errors, notes = [], 0, [], [], []
+    this_month = date(today.year, today.month, 1)
     for lease in db.scalars(stmt.order_by(Lease.id)):
+        rhythm = lease.payment_rhythm
+        if rhythm not in domain.RHYTHM_MONTHS:
+            notes.append({"lease_id": lease.id, "code": "on_demand", "message": f"Vertrag {lease.id}: Zahlungsrhythmus „{rhythm}“ – keine automatische Sollstellung."})
+            continue
+        if not lease.terms:
+            errors.append({"lease_id": lease.id, "code": "no_terms", "message": f"Vertrag {lease.id} hat keine Mietkonditionen – Sollstellung nicht möglich."})
+            continue
+        if not 1 <= (lease.payment_due_day or 0) <= 31:
+            errors.append({"lease_id": lease.id, "code": "bad_due_day", "message": f"Vertrag {lease.id}: ungültiger Fälligkeitstag."})
+            continue
         end = effective_end(lease) or OPEN_END
-        for y, m in month_range(from_month, through_month):
-            if date(y, m, 1) > end or date(y, m, monthrange(y, m)[1]) < lease.start_date:
+        for y, m, n in period_months(rhythm, from_month, through_month):
+            ps, pe = date(y, m, 1), _period_end(y, m, n)
+            if ps > end or pe < lease.start_date:
                 continue
-            for ctype, amount in monthly_components(lease, y, m).items():
-                key = f"{lease.id}:{ctype}:{y}-{m:02d}"
-                existing = db.scalar(select(Charge).where(Charge.dedupe_key == key))
-                if existing:
-                    if existing.amount == amount:
+            existing_all = list(db.scalars(select(Charge).where(Charge.lease_id == lease.id, Charge.voided_at.is_(None), Charge.period_start <= pe, Charge.period_end >= ps)))
+            for ctype, amount in period_amounts(lease, y, m, n).items():
+                key = charge_key(lease.id, ctype, y, m, n)
+                same = [c for c in existing_all if c.charge_type == ctype and c.dedupe_key == key]
+                if same:
+                    if same[0].amount == amount:
                         skipped += 1
                     else:
-                        conflicts.append({"charge_id": existing.id, "lease_id": lease.id, "charge_type": ctype, "month": f"{y}-{m:02d}",
-                                          "existing_amount": existing.amount, "calculated_amount": amount})
+                        conflicts.append({"charge_id": same[0].id, "lease_id": lease.id, "charge_type": ctype, "month": f"{y}-{m:02d}", "reason": "amount_differs",
+                                          "existing_amount": same[0].amount, "calculated_amount": amount})
                     continue
-                c = Charge(lease_id=lease.id, direction=direction_for(lease), charge_type=ctype, period_start=date(y, m, 1),
-                           period_end=date(y, m, monthrange(y, m)[1]), due_date=due_date_for(lease, y, m), amount=amount,
-                           dedupe_key=key, source="generated", created_by_user_id=actor_id)
-                db.add(c)
-                created.append(c)
+                overlap = [c for c in existing_all if c.charge_type == ctype and c.source == "generated"]
+                if overlap:  # andere Periodenlänge bereits abgerechnet → keine Doppelbuchung
+                    conflicts.append({"charge_id": overlap[0].id, "lease_id": lease.id, "charge_type": ctype, "month": f"{y}-{m:02d}", "reason": "period_overlap",
+                                      "existing_amount": overlap[0].amount, "calculated_amount": amount,
+                                      "existing_period": f"{overlap[0].period_start} – {overlap[0].period_end}"})
+                    continue
+                plan.append({"lease_id": lease.id, "charge_type": ctype, "period_start": ps, "period_end": pe, "months": n, "amount": amount,
+                             "due_date": max(due_date_for(lease, y, m), lease.start_date), "key": key, "direction": direction_for(lease), "backdated": pe < this_month})
+    backdated = sum(1 for p in plan if p["backdated"])
+    result = {"dry_run": dry_run, "would_create": [{k: v for k, v in p.items() if k != "key"} for p in plan], "would_create_count": len(plan), "backdated_count": backdated,
+              "skipped_existing": skipped, "conflicts": conflicts, "errors": errors, "notes": notes}
+    if dry_run:
+        return result
+    if forbid_backdated and backdated:
+        raise ServiceError("backdated_confirmation_required", f"{backdated} Sollstellung(en) betreffen vergangene Zeiträume (rückwirkend). Bitte ausdrücklich bestätigen.", 409,
+                           {"backdated_count": backdated})
+    created = []
+    for p in plan:
+        c = Charge(lease_id=p["lease_id"], direction=p["direction"], charge_type=p["charge_type"], period_start=p["period_start"], period_end=p["period_end"],
+                   due_date=p["due_date"], amount=p["amount"], dedupe_key=p["key"], source="generated", created_by_user_id=actor_id)
+        db.add(c)
+        created.append(c)
     db.flush()
     audit.record(db, "charge.generated", actor_user_id=actor_id, entity_type="charge",
-                 summary=f"{len(created)} Sollstellungen erzeugt", details={"created": len(created), "skipped": skipped, "conflicts": len(conflicts),
+                 summary=f"{len(created)} Sollstellungen erzeugt", details={"created": len(created), "skipped": skipped, "conflicts": len(conflicts), "backdated": backdated,
                                                                             "from": str(from_month), "through": str(through_month)})
-    return {"created": [c.id for c in created], "created_count": len(created), "skipped_existing": skipped, "conflicts": conflicts}
+    return {**result, "created": [c.id for c in created], "created_count": len(created)}
 
 
 def void_charge(db: Session, actor_id: int | None, charge_id: int, reason: str) -> Charge:

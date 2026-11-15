@@ -130,7 +130,7 @@ class LeaseIn(In):
     notice_note: str | None = None
     subletting_permitted: bool | None = None
     deposit_amount: Amount | None = None
-    payment_rhythm: Literal["monthly", "quarterly", "yearly", "on_demand"] = "monthly"
+    payment_rhythm: Literal["monthly", "quarterly", "half_yearly", "yearly", "on_demand"] = "monthly"
     payment_due_day: int = Field(1, ge=1, le=31)
     intended_use: str | None = Field(None, max_length=80)
     intended_use_note: str | None = None
@@ -152,7 +152,7 @@ class LeasePatch(In):
     notice_note: str | None = None
     subletting_permitted: bool | None = None
     deposit_amount: Amount | None = None
-    payment_rhythm: Literal["monthly", "quarterly", "yearly", "on_demand"] | None = None
+    payment_rhythm: Literal["monthly", "quarterly", "half_yearly", "yearly", "on_demand"] | None = None
     payment_due_day: int | None = Field(None, ge=1, le=31)
     intended_use: str | None = None
     intended_use_note: str | None = None
@@ -234,6 +234,7 @@ class ChargeGenerateIn(In):
     from_month: date
     through_month: date
     lease_id: int | None = None
+    allow_backdated: bool = False  # rückwirkende Perioden nur nach ausdrücklicher Bestätigung
 
 
 class ChargeManualIn(In):
