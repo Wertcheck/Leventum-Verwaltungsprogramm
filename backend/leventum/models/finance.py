@@ -40,6 +40,7 @@ class Invoice(Base, Timestamps):
     supplier_party_id: Mapped[int | None] = mapped_column(ForeignKey("party.id"))
     property_id: Mapped[int] = mapped_column(ForeignKey("property.id"), index=True)
     unit_id: Mapped[int | None] = mapped_column(ForeignKey("unit.id"))
+    repair_id: Mapped[int | None] = mapped_column(ForeignKey("repair.id"), index=True)  # Verknüpfung Reparatur ↔ Ausgabe
     cost_type_id: Mapped[int | None] = mapped_column(ForeignKey("cost_type.id"))
     invoice_number: Mapped[str | None] = mapped_column(String(80))
     invoice_date: Mapped[date] = mapped_column(Date)
@@ -127,6 +128,9 @@ class Document(Base):
     doc_type: Mapped[str] = mapped_column(String(40), default="sonstige")
     uploaded_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("app_user.id"))
     uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # Weichlöschung: Datei bleibt erhalten
+    deleted_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("app_user.id"))
+    delete_reason: Mapped[str | None] = mapped_column(Text)
     links: Mapped[list["DocumentLink"]] = relationship(cascade="all, delete-orphan")
 
 

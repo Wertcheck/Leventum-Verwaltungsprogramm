@@ -149,7 +149,7 @@ def doc_out(d: Document) -> dict:
             "links": [{"entity_type": l.entity_type, "entity_id": l.entity_id} for l in d.links]}
 
 
-@router.post("/documents", dependencies=[FW], status_code=201)
+@router.post("/documents", dependencies=[Depends(require("document:write"))], status_code=201)
 async def documents_upload(file: UploadFile = File(...), entity_type: str = Form(...), entity_id: int = Form(...), doc_type: str = Form("sonstige"),
                            db: Session = Depends(get_db), user: AppUser = Depends(current_user), settings: Settings = Depends(get_settings)):
     data = await file.read(settings.max_upload_bytes + 1)
@@ -159,14 +159,16 @@ async def documents_upload(file: UploadFile = File(...), entity_type: str = Form
     return doc_out(doc)
 
 
-@router.get("/documents", dependencies=[FR])
+@router.get("/documents", dependencies=[Depends(require("document:read"))])
 def documents_list(entity_type: str, entity_id: int, db: Session = Depends(get_db)):
     return {"items": [doc_out(d) for d in DOC.for_entity(db, entity_type, entity_id)]}
 
 
-@router.get("/documents/{did}/download", dependencies=[FR])
+@router.get("/documents/{did}/download", dependencies=[Depends(require("document:read"))])
 def documents_download(did: int, db: Session = Depends(get_db), settings: Settings = Depends(get_settings)):
     d = get_or_404(db, Document, did, "Dokument")
+    if d.deleted_at:
+        raise ServiceError("deleted", "Das Dokument wurde gelöscht.", 404)
     store = _store(settings)
     if not store.exists(d.storage_key):
         raise ServiceError("file_missing", "Die Datei fehlt im Dokumentenspeicher.", 404)

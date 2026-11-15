@@ -27,10 +27,10 @@ export const NAV: NavEntry[] = [
     { path: "/betriebskosten", label: "Betriebskosten", icon: "calc", phase: "D (nur API)" },
   ] },
   { label: "Betrieb", icon: "check", children: [
-    { path: "/aufgaben", label: "Aufgaben", icon: "check", phase: "E" },
-    { path: "/reparaturen", label: "Reparaturen", icon: "wrench", phase: "E" },
-    { path: "/kommunikation", label: "Kommunikation", icon: "chat", phase: "E" },
-    { path: "/dokumente", label: "Dokumente", icon: "folder", phase: "E" },
+    { path: "/aufgaben", label: "Aufgaben", icon: "check" },
+    { path: "/reparaturen", label: "Reparaturen", icon: "wrench" },
+    { path: "/kommunikation", label: "Kommunikation", icon: "chat" },
+    { path: "/dokumente", label: "Dokumente", icon: "folder" },
   ] },
   { label: "Auswertungen", icon: "chart", children: [
     { path: "/auswertungen/wirtschaftlichkeit", label: "Wirtschaftlichkeit", icon: "chart" },

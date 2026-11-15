@@ -3,10 +3,10 @@ ALL = "*"
 
 ROLE_PERMISSIONS: dict[str, set[str]] = {
     "admin": {ALL},  # inkl. system:backup
-    "verwaltung": {"dashboard:read", "master:read", "master:write", "task:read", "task:write", "document:read", "document:write"},
-    "buchhaltung": {"dashboard:read", "master:read", "finance:read", "finance:write", "document:read"},
-    "objektbetreuung": {"dashboard:read", "master:read", "task:read", "task:write", "repair:read", "repair:write"},
-    "lesend": {"dashboard:read", "master:read", "finance:read", "task:read", "document:read"},
+    "verwaltung": {"dashboard:read", "master:read", "master:write", "task:read", "task:write", "repair:read", "repair:write", "document:read", "document:write"},
+    "buchhaltung": {"dashboard:read", "master:read", "finance:read", "finance:write", "document:read", "document:write"},
+    "objektbetreuung": {"dashboard:read", "master:read", "task:read", "task:write", "repair:read", "repair:write", "document:read", "document:write"},
+    "lesend": {"dashboard:read", "master:read", "finance:read", "task:read", "repair:read", "document:read"},
 }
 
 ROLES = {

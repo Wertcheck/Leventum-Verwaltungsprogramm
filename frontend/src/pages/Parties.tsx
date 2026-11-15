@@ -86,6 +86,7 @@ export function OwnersPage() {
 
 export function PartyDetail() {
   const { id } = useParams();
+  const hist = useFetch<{ items: { at: string; summary: string; actor: string | null; source: string }[] }>(`/history?entity_type=party&entity_id=${id}`);
   const { data, error } = useFetch<Party & { leases: { id: number; kind: string; status: string; type: string; spaces: string[]; start_date: string; end_date: string | null }[]; history: { at: string; summary: string }[]; notes: string | null }>(`/parties/${id}`);
   if (error) return <div className="alert err">{error}</div>;
   if (!data) return null;
@@ -99,8 +100,8 @@ export function PartyDetail() {
         </Card>
         <Card><div className="card-head"><h2>Stammdaten</h2></div>
           <dl className="kv"><dt>E-Mail</dt><dd>{data.email ?? "–"}</dd><dt>Telefon</dt><dd>{data.phone ?? "–"}</dd><dt>Ort</dt><dd>{data.city ?? "–"}</dd></dl>
-          <h2 style={{ margin: "20px 0 8px" }}>Historie</h2>
-          {data.history.length === 0 ? <p className="muted">Keine Einträge.</p> : data.history.map((h, i) => <div className="list-row" key={i}><span className="muted">{dateDe(h.at)}</span><span>{h.summary}</span></div>)}
+          <h2 style={{ margin: "20px 0 8px" }}>Historie (Vorgänge, Kommunikation, Reparaturen, Aufgaben)</h2>
+          {!hist.data || hist.data.items.length === 0 ? <p className="muted">Keine Einträge.</p> : hist.data.items.map((h, i) => <div className="list-row" key={i}><span className="muted">{dateDe(h.at)}</span><span className="grow">{h.summary}</span>{h.actor && <span className="muted">{h.actor}</span>}</div>)}
         </Card>
       </div>
     </>

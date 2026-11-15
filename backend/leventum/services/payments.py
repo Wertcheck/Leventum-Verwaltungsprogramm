@@ -181,6 +181,10 @@ def create_invoice(db: Session, actor_id: int | None, *, property_id: int, amoun
         raise ServiceError("invalid", "Wohneinheit gehört nicht zum Objekt.")
     if f.get("supplier_party_id") is not None:
         get_or_404(db, Party, f["supplier_party_id"], "Lieferant")
+    if f.get("repair_id") is not None:
+        from leventum.models import Repair
+        if get_or_404(db, Repair, f["repair_id"], "Reparatur").property_id != prop.id:
+            raise ServiceError("invalid", "Die Reparatur gehört zu einem anderen Objekt.")
     if f.get("cost_type_id") is not None:
         get_or_404(db, CostType, f["cost_type_id"], "Kostenart")
     if f.get("invoice_number") and f.get("supplier_party_id") is not None and db.scalar(

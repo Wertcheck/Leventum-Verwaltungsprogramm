@@ -4,6 +4,7 @@ import { api, ApiError } from "../lib/api";
 import { dateDe, eur, useFetch } from "../lib/hooks";
 import { Badge, Card, EmptyState, PageHeader } from "../components/ui";
 import { Field, Modal, Select, Text } from "../components/Form";
+import DocPanel from "../components/DocPanel";
 
 interface LeaseRow { id: number; kind: string; status: string; type: string; start_date: string; end_date: string | null; spaces: string[]; parties: { party_id: number; name: string; role: string }[] }
 interface Issue { code: string; message: string }
@@ -146,6 +147,44 @@ export function LeaseDetail() {
         </div>
         {data.notes.map((n) => <div className="list-row" key={n.id}><span className="muted">{dateDe(n.created_at)}</span><span>{n.text}</span></div>)}
       </Card>
+      <div style={{ height: 20 }} />
+      <LeaseExtras id={data.id} />
     </>
+  );
+}
+
+
+interface Handover { id: number; kind: string; protocol_date: string; keys_handed: number | null; signed: boolean; condition_notes: string | null }
+
+function LeaseExtras({ id }: { id: number }) {
+  const miss = useFetch<{ missing: string[] }>(`/leases/${id}/missing-documents`);
+  const ho = useFetch<{ items: Handover[] }>(`/handover-protocols?lease_id=${id}`);
+  const [open, setOpen] = useState(false), [f, setF] = useState<Record<string, string>>({ kind: "move_in" }), [err, setErr] = useState("");
+  const set = (k: string) => (v: string) => setF({ ...f, [k]: v });
+  async function save() {
+    setErr("");
+    try { await api("/handover-protocols", { method: "POST", json: { lease_id: id, kind: f.kind, protocol_date: f.date, keys_handed: f.keys ? Number(f.keys) : null, meter_readings: f.meter || null, condition_notes: f.notes || null, signed: f.signed === "1" } }); setOpen(false); ho.reload(); miss.reload(); }
+    catch (e) { setErr(e instanceof ApiError ? e.message : "Fehler"); }
+  }
+  return (
+    <div className="grid two-col">
+      <div>
+        {miss.data && miss.data.missing.length > 0 && <div className="alert warn">Fehlende Dokumente (organisatorische Pflichtliste): {miss.data.missing.join(", ")}</div>}
+        <DocPanel entityType="lease" entityId={id} defaultType="mietvertrag" />
+      </div>
+      <Card>
+        <div className="card-head"><h2>Übergabeprotokolle</h2><button className="btn small" onClick={() => setOpen(true)}>+ Protokoll</button></div>
+        {ho.data?.items.length === 0 && <p className="muted">Kein Protokoll erfasst.</p>}
+        {ho.data?.items.map((h) => <div className="list-row" key={h.id}><span className="grow"><strong>{h.kind === "move_in" ? "Einzug" : "Auszug"}</strong> {dateDe(h.protocol_date)}{h.keys_handed != null ? ` · ${h.keys_handed} Schlüssel` : ""}<div className="muted">{h.condition_notes}</div></span><Badge tone={h.signed ? "ok" : "warn"}>{h.signed ? "unterschrieben" : "nicht unterschrieben"}</Badge></div>)}
+      </Card>
+      {open && <Modal title="Übergabeprotokoll" onClose={() => setOpen(false)}><div className="form-grid">
+        <Field label="Art"><Select value={f.kind} onChange={set("kind")} options={[{ value: "move_in", label: "Einzug" }, { value: "move_out", label: "Auszug" }]} /></Field>
+        <Field label="Datum"><Text type="date" value={f.date ?? ""} onChange={set("date")} /></Field>
+        <Field label="Schlüssel (Anzahl)"><Text value={f.keys ?? ""} onChange={set("keys")} /></Field>
+        <Field label="Unterschrieben?"><Select value={f.signed ?? "0"} onChange={set("signed")} options={[{ value: "0", label: "Nein" }, { value: "1", label: "Ja" }]} /></Field>
+        <div className="full"><Field label="Zählerstände"><Text value={f.meter ?? ""} onChange={set("meter")} /></Field></div>
+        <div className="full"><Field label="Zustand / Mängel"><Text value={f.notes ?? ""} onChange={set("notes")} /></Field></div>
+        <div className="full">{err && <div className="alert err">{err}</div>}<button className="btn primary" onClick={save}>Speichern</button></div></div></Modal>}
+    </div>
   );
 }

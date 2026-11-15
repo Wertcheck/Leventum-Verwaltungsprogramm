@@ -7,7 +7,7 @@ import { Icons } from "../components/icons";
 const ICONS: Record<string, keyof typeof Icons> = {
   properties: "building", units: "door", active_main_leases: "file", active_subleases: "contract", active_tenants: "users",
   main_rent_obligations: "euro", sublease_receivables: "euro", open_receivables: "receipt", overdue_payments: "bell",
-  monthly_utility_costs: "calc", physical_vacancy: "door", economic_vacancy_cost: "euro", open_tasks: "check", upcoming_contract_ends: "key",
+  monthly_utility_costs: "calc", overdue_tasks: "bell", open_repairs: "wrench", physical_vacancy: "door", economic_vacancy_cost: "euro", open_tasks: "check", upcoming_contract_ends: "key",
 };
 
 export default function Dashboard({ user }: { user: User }) {
@@ -42,7 +42,14 @@ export default function Dashboard({ user }: { user: User }) {
             <div className="alert warn">{backup.last_backup_at ? `Das letzte Backup ist ${Math.round(backup.age_hours ?? 0)} Stunden alt.` : "Es wurde noch kein Backup erstellt."} Unter „Einstellungen“ ein Backup anlegen.</div>
           )}
           {backup && !backup.stale && <div className="alert ok">Letztes Backup: {new Date(backup.last_backup_at!).toLocaleString("de-DE")}</div>}
-          <p className="muted">Hinweise zu Fristen, Zahlungen und Dokumenten erscheinen, sobald die jeweiligen Module vorhanden sind.</p>
+          {data?.warnings.length === 0 && <p className="muted">Keine Hinweise. Fristen, Zahlungen, Dokumente und Reparaturen werden laufend aus Ihren Daten geprüft.</p>}
+          {data?.warnings.map((w) => (
+            <div className="list-row" key={w.key} style={{ alignItems: "flex-start" }}>
+              <Badge tone={w.severity === "critical" ? "err" : w.severity === "warning" ? "warn" : "ok"}>{w.severity === "critical" ? "Dringend" : w.severity === "warning" ? "Hinweis" : "Info"}</Badge>
+              <div className="grow"><div>{w.title}</div><div className="muted">{w.detail}</div></div>
+              {w.task_id ? <Link className="link" to="/aufgaben">Aufgabe #{w.task_id}</Link> : <button className="btn small" onClick={async () => { await api("/reminders/task", { method: "POST", json: { key: w.key } }); api<DashboardData>("/dashboard").then(setData); }}>Aufgabe erstellen</button>}
+            </div>))}
+          {data && data.tasks.length > 0 && <><h2 style={{ margin: "16px 0 8px" }}>Nächste Aufgaben</h2>{data.tasks.map((t) => <div className="list-row" key={t.id}><span className="grow">{t.title}</span><span className="muted">{t.due_date ?? "ohne Termin"}</span>{t.overdue && <Badge tone="err">überfällig</Badge>}</div>)}</>}
         </Card>
       </div>
       <Card className="" >

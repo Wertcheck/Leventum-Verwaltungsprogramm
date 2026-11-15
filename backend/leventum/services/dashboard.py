@@ -18,6 +18,8 @@ KPI_DEFINITIONS = [
     ("overdue_payments", "Überfällige Zahlungen", "D"),
     ("monthly_utility_costs", "Monatliche Betriebskosten", "D"),
     ("open_tasks", "Offene Aufgaben", "E"),
+    ("overdue_tasks", "Überfällige Aufgaben", "E"),
+    ("open_repairs", "Offene Reparaturen", "E"),
     ("physical_vacancy", "Physischer Leerstand (unbelegte Betten/Zimmer/Einheiten)", "D"),
     ("economic_vacancy_cost", "Wirtschaftlicher Leerstand (Kosten, laufender Monat)", "D"),
     ("upcoming_contract_ends", "Anstehende Vertragsenden", "C"),
@@ -62,7 +64,26 @@ IMPLEMENTED_MONEY: dict = {
     "monthly_utility_costs": lambda db: _fig(db)["main_utility"],
     "economic_vacancy_cost": lambda db: _fig(db)["economic_vacancy_cost"],
 }
+def _open_tasks(db):
+    from leventum import domain as d
+    from leventum.models import Task
+    return db.scalar(select(func.count()).select_from(Task).where(Task.status.in_(d.TASK_OPEN)))
+
+
+def _overdue_tasks(db):
+    from leventum.models import Task
+    from leventum.services.tasks import query
+    return len(query(db, overdue=True))
+
+
+def _open_repairs(db):
+    from leventum import domain as d
+    from leventum.models import Repair
+    return db.scalar(select(func.count()).select_from(Repair).where(Repair.status.in_(d.REPAIR_OPEN)))
+
+
 IMPLEMENTED: dict = {
+    "open_tasks": _open_tasks, "overdue_tasks": _overdue_tasks, "open_repairs": _open_repairs,
     "overdue_payments": lambda db: _fig(db)["overdue_count"],
     "physical_vacancy": lambda db: _fig(db)["vacant_leaves"],
     "properties": lambda db: db.scalar(select(func.count()).select_from(Property).where(Property.is_active.is_(True))),
@@ -84,4 +105,8 @@ def build_dashboard(db: Session) -> dict:
             kpis.append({"key": key, "label": label, "value": None, "available": False, "planned_phase": phase})
         else:
             kpis.append({"key": key, "label": label, "value": fn(db), "available": True, "planned_phase": phase})
-    return {"kpis": kpis, "warnings": [], "tasks": []}
+    from leventum.api.master import js
+    from leventum.services import reminders as rem, tasks as tk
+    from leventum.api.master import ser
+    return {"kpis": kpis, "warnings": js(rem.compute(db)[:8]),
+            "tasks": [{**ser(t), "overdue": tk.is_overdue(t)} for t in tk.query(db, open_only=True)[:5]]}

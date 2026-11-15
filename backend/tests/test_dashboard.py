@@ -8,9 +8,11 @@ def kpis(client):
     return {k["key"]: k for k in client.get("/api/v1/dashboard").json()["kpis"]}
 
 
-def test_dashboard_unavailable_kpis_stay_empty_and_available_are_real(auth_client):
+def test_dashboard_kpis_are_real_and_empty_database_shows_zero(auth_client):
     k = kpis(auth_client)
-    assert k["open_tasks"]["available"] is False and k["open_tasks"]["value"] is None  # Phase E
+    assert all(x["available"] for x in k.values())  # ab Phase E hat jede Kennzahl eine echte Datenquelle
+    for key in ("open_tasks", "overdue_tasks", "open_repairs"):
+        assert k[key]["value"] == 0
     for key in ("properties", "units", "active_main_leases", "active_subleases", "active_tenants", "upcoming_contract_ends", "overdue_payments", "physical_vacancy"):
         assert k[key]["available"] is True and k[key]["value"] == 0
     for key in ("main_rent_obligations", "sublease_receivables", "open_receivables", "monthly_utility_costs", "economic_vacancy_cost"):

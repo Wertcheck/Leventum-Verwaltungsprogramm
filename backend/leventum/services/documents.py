@@ -17,9 +17,10 @@ _ENTITY_MODELS: dict = {}
 
 def _model(entity_type: str):
     if not _ENTITY_MODELS:
-        from leventum.models import Deposit, DepositTransaction, Invoice, Lease, Party, Payment, Property, Unit
+        from leventum.models import (Communication, Deposit, DepositTransaction, HandoverProtocol, Invoice, Lease, Party, Payment, Property, Repair, Task, Unit)
         _ENTITY_MODELS.update(party=Party, property=Property, unit=Unit, lease=Lease, invoice=Invoice, deposit=Deposit,
-                              deposit_transaction=DepositTransaction, payment=Payment)
+                              deposit_transaction=DepositTransaction, payment=Payment, repair=Repair, task=Task, communication=Communication,
+                              handover_protocol=HandoverProtocol)
     return _ENTITY_MODELS[entity_type]
 
 
@@ -43,6 +44,64 @@ def upload(db: Session, store: FileStore, actor_id: int | None, *, stream: Binar
     return doc
 
 
-def for_entity(db: Session, entity_type: str, entity_id: int) -> list[Document]:
-    return list(db.scalars(select(Document).join(DocumentLink).where(DocumentLink.entity_type == entity_type, DocumentLink.entity_id == entity_id)
-                           .order_by(Document.id)))
+def for_entity(db: Session, entity_type: str, entity_id: int, include_deleted: bool = False) -> list[Document]:
+    stmt = select(Document).join(DocumentLink).where(DocumentLink.entity_type == entity_type, DocumentLink.entity_id == entity_id).order_by(Document.id)
+    if not include_deleted:
+        stmt = stmt.where(Document.deleted_at.is_(None))
+    return list(db.scalars(stmt))
+
+
+def query(db: Session, *, q: str | None = None, doc_type: str | None = None, entity_type: str | None = None, entity_id: int | None = None,
+          include_deleted: bool = False, limit: int = 500) -> list[Document]:
+    stmt = select(Document).order_by(Document.id.desc())
+    if entity_type:
+        stmt = stmt.join(DocumentLink).where(DocumentLink.entity_type == entity_type)
+        if entity_id is not None:
+            stmt = stmt.where(DocumentLink.entity_id == entity_id)
+    if q:
+        stmt = stmt.where(Document.original_name.ilike(f"%{q}%"))
+    if doc_type:
+        stmt = stmt.where(Document.doc_type == doc_type)
+    if not include_deleted:
+        stmt = stmt.where(Document.deleted_at.is_(None))
+    return list(db.scalars(stmt.limit(limit)).unique())
+
+
+def add_link(db: Session, actor_id: int | None, document_id: int, entity_type: str, entity_id: int) -> Document:
+    doc = db.get(Document, document_id)
+    if doc is None or doc.deleted_at:
+        raise NotFound("Dokument")
+    if entity_type not in domain.DOC_ENTITIES:
+        raise ServiceError("invalid", "Ungültiger Zuordnungstyp.")
+    if db.get(_model(entity_type), entity_id) is None:
+        raise NotFound("Zuordnungsziel")
+    if not any(l.entity_type == entity_type and l.entity_id == entity_id for l in doc.links):
+        doc.links.append(DocumentLink(entity_type=entity_type, entity_id=entity_id))
+        audit.record(db, "document.linked", actor_user_id=actor_id, entity_type=entity_type, entity_id=entity_id, summary="Dokument zugeordnet", details={"document_id": doc.id})
+    db.flush()
+    return doc
+
+
+def soft_delete(db: Session, actor_id: int | None, document_id: int, reason: str) -> Document:
+    """Blendet das Dokument aus. Die Datei bleibt im Speicher (Aufbewahrungsfristen sind fachlich offen) und im Backup."""
+    from datetime import datetime, timezone
+    doc = db.get(Document, document_id)
+    if doc is None:
+        raise NotFound("Dokument")
+    if doc.deleted_at:
+        raise ServiceError("already_deleted", "Das Dokument ist bereits gelöscht.", 409)
+    if not reason.strip():
+        raise ServiceError("invalid", "Begründung erforderlich.")
+    doc.deleted_at, doc.deleted_by_user_id, doc.delete_reason = datetime.now(timezone.utc), actor_id, reason.strip()
+    audit.record(db, "document.deleted", actor_user_id=actor_id, entity_type="document", entity_id=doc.id, summary=f"Dokument gelöscht: {doc.original_name}", details={"reason": reason, "sha256": doc.sha256})
+    db.flush()
+    return doc
+
+
+def missing_for_lease(db: Session, lease) -> list[str]:
+    """Fehlende Pflichtdokumente laut Annahme `REQUIRED_DOCS`. Ein Übergabeprotokoll gilt auch durch einen erfassten Einzug-Protokolleintrag als vorhanden."""
+    from leventum.models import HandoverProtocol
+    have = {d.doc_type for d in for_entity(db, "lease", lease.id)}
+    if db.scalar(select(HandoverProtocol.id).where(HandoverProtocol.lease_id == lease.id, HandoverProtocol.kind == "move_in")) is not None:
+        have.add("uebergabeprotokoll")
+    return [t for t in domain.REQUIRED_DOCS.get(lease.kind, ()) if t not in have]

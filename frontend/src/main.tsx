@@ -18,6 +18,10 @@ import BankPage from "./pages/Bank";
 import InvoicesPage from "./pages/Invoices";
 import EconomicsPage from "./pages/Economics";
 import VacancyPage from "./pages/Vacancy";
+import TasksPage from "./pages/Tasks";
+import { RepairDetail, RepairsPage } from "./pages/Repairs";
+import CommunicationsPage from "./pages/Communications";
+import DocumentsPage from "./pages/Documents";
 import { NAV, isGroup, type NavLeaf } from "./nav";
 
 type State = { kind: "loading" } | { kind: "setup" } | { kind: "login" } | { kind: "ready"; user: User } | { kind: "error"; msg: string };
@@ -61,6 +65,11 @@ function App() {
           <Route path="/rechnungen" element={<InvoicesPage />} />
           <Route path="/auswertungen/wirtschaftlichkeit" element={<EconomicsPage />} />
           <Route path="/auswertungen/leerstand" element={<VacancyPage />} />
+          <Route path="/aufgaben" element={<TasksPage />} />
+          <Route path="/reparaturen" element={<RepairsPage />} />
+          <Route path="/reparaturen/:id" element={<RepairDetail />} />
+          <Route path="/kommunikation" element={<CommunicationsPage />} />
+          <Route path="/dokumente" element={<DocumentsPage />} />
           {LEAVES.map((l) => <Route key={l.path} path={l.path} element={<Placeholder title={l.label} phase={l.phase!} />} />)}
           <Route path="*" element={<Placeholder title="Seite nicht gefunden" phase="–" />} />
         </Route>

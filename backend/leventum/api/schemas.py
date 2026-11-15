@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, Literal
 
@@ -284,6 +284,7 @@ class InvoiceIn(In):
     invoice_date: date
     supplier_party_id: int | None = None
     unit_id: int | None = None
+    repair_id: int | None = None
     cost_type_id: int | None = None
     invoice_number: str | None = Field(None, max_length=80)
     due_date: date | None = None
@@ -348,3 +349,126 @@ class ReasonIn(In):
 class LeaseAllocationIn(In):
     method: Literal["area", "equal", "custom"]
     weights: dict[int, Pos] = {}
+
+
+# --- Phase E ---
+Prio = Literal["low", "normal", "high", "urgent"]
+
+
+class TaskIn(In):
+    title: str = Field(min_length=1, max_length=200)
+    description: str | None = None
+    priority: Prio = "normal"
+    due_date: date | None = None
+    assignee_user_id: int | None = None
+    party_id: int | None = None
+    property_id: int | None = None
+    unit_id: int | None = None
+    lease_id: int | None = None
+    invoice_id: int | None = None
+    repair_id: int | None = None
+
+
+class TaskPatch(In):
+    title: str | None = Field(None, min_length=1, max_length=200)
+    description: str | None = None
+    priority: Prio | None = None
+    due_date: date | None = None
+    assignee_user_id: int | None = None
+    party_id: int | None = None
+    property_id: int | None = None
+    unit_id: int | None = None
+    lease_id: int | None = None
+    invoice_id: int | None = None
+    repair_id: int | None = None
+
+
+class TaskStatusIn(In):
+    status: Literal["open", "in_progress", "waiting", "done", "cancelled"]
+    note: str | None = None
+
+
+class ReminderTaskIn(In):
+    key: str = Field(min_length=1, max_length=160)
+    due_date: date | None = None
+
+
+Category = Literal["heizung", "wasserschaden", "elektrik", "sanitaer", "fenster", "tuerschloss", "instandhaltung", "sonstige"]
+
+
+class RepairIn(In):
+    property_id: int
+    title: str = Field(min_length=1, max_length=200)
+    reported_on: date
+    description: str | None = None
+    category: Category = "sonstige"
+    priority: Prio = "normal"
+    unit_id: int | None = None
+    lease_id: int | None = None
+    reported_by_party_id: int | None = None
+    contractor_party_id: int | None = None
+    cost_estimate: Amount | None = None
+    scheduled_for: date | None = None
+
+
+class RepairPatch(In):
+    title: str | None = Field(None, min_length=1, max_length=200)
+    description: str | None = None
+    category: Category | None = None
+    priority: Prio | None = None
+    unit_id: int | None = None
+    lease_id: int | None = None
+    contractor_party_id: int | None = None
+    cost_estimate: Amount | None = None
+    scheduled_for: date | None = None
+
+
+class RepairStatusIn(In):
+    status: Literal["reported", "scheduled", "in_progress", "waiting", "done", "cancelled"]
+    note: str | None = None
+    on: date | None = None
+
+
+class NoteTextIn(In):
+    text: str = Field(min_length=1)
+
+
+class InvoiceLinkIn(In):
+    invoice_id: int
+
+
+class FollowUpIn(In):
+    title: str = Field(min_length=1, max_length=200)
+    due_date: date | None = None
+    priority: Prio = "normal"
+
+
+class CommunicationIn(In):
+    channel: Literal["email", "phone", "letter", "in_person", "messenger", "other"]
+    direction: Literal["in", "out"]
+    subject: str = Field(min_length=1, max_length=300)
+    body: str | None = None
+    occurred_at: datetime | None = None
+    party_id: int | None = None
+    lease_id: int | None = None
+    property_id: int | None = None
+    unit_id: int | None = None
+    repair_id: int | None = None
+    follow_up: FollowUpIn | None = None
+
+
+class HandoverIn(In):
+    lease_id: int
+    kind: Literal["move_in", "move_out"]
+    protocol_date: date
+    unit_id: int | None = None
+    keys_handed: int | None = Field(None, ge=0)
+    meter_readings: str | None = None
+    condition_notes: str | None = None
+    attendees: str | None = None
+    signed: bool = False
+
+
+class DocLinkIn(In):
+    entity_type: str
+    entity_id: int

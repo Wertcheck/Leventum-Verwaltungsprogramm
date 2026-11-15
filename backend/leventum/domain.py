@@ -51,4 +51,17 @@ ALLOCATION_METHODS = ("area", "equal", "custom")
 BANK_TX_STATUS = ("open", "confirmed", "ignored")
 DOC_TYPES = ("mietvertrag", "nachtrag", "uebergabeprotokoll", "rechnung", "betriebskostenabrechnung", "schriftverkehr",
              "versicherung", "reparaturbeleg", "kaution", "sonstige")
-DOC_ENTITIES = ("party", "property", "unit", "lease", "invoice", "deposit", "deposit_transaction", "payment")
+DOC_ENTITIES = ("party", "property", "unit", "lease", "invoice", "deposit", "deposit_transaction", "payment", "repair", "task", "communication", "handover_protocol")
+
+# --- Phase E ---
+TASK_STATUS = ("open", "in_progress", "waiting", "done", "cancelled")
+TASK_OPEN = ("open", "in_progress", "waiting")
+PRIORITIES = ("low", "normal", "high", "urgent")
+REPAIR_STATUS = ("reported", "scheduled", "in_progress", "waiting", "done", "cancelled")
+REPAIR_OPEN = ("reported", "scheduled", "in_progress", "waiting")
+REPAIR_CATEGORIES = ("heizung", "wasserschaden", "elektrik", "sanitaer", "fenster", "tuerschloss", "instandhaltung", "sonstige")
+COMM_CHANNELS = ("email", "phone", "letter", "in_person", "messenger", "other")
+COMM_DIRECTIONS = ("in", "out")
+HANDOVER_KINDS = ("move_in", "move_out")
+# Annahme (nicht rechtlich, nur organisatorisch): welche Dokumenttypen je Vertragsart vorhanden sein sollen
+REQUIRED_DOCS = {"main": ("mietvertrag",), "sub": ("mietvertrag", "uebergabeprotokoll")}

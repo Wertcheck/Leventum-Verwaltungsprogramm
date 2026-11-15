@@ -8,3 +8,4 @@ from leventum.models.finance import (  # noqa: F401
     BankAccount, BankImport, BankTransaction, Charge, Deposit, DepositTransaction, Document, DocumentLink, DunningLine,
     DunningNotice, Invoice, LeaseAllocationWeight, Payment, PaymentAllocation,
 )
+from leventum.models.operations import Communication, HandoverProtocol, Repair, RepairEvent, Task  # noqa: F401

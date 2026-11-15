@@ -51,3 +51,15 @@ Geldbeträge und Flächen sind JSON-Strings mit 2 Nachkommastellen. Validierungs
 | Bankimport | `GET/POST /bank/accounts`, `POST /bank/imports/preview`, `POST /bank/imports`, `GET /bank/imports`, `GET /bank/transactions` (`suggestions`, `only_unmatched`), `POST …/{id}/confirm` (Pflichtfeld `confirm: true`), `…/ignore`, `…/reopen` |
 | Auswertungen | `GET /economics?scope=portfolio|property|unit|rentable_unit&id&start&end`, `GET /vacancy?start&end&property_id` |
 | Hauptmiete | `PUT /leases/{id}/allocation` (Methode area/equal/custom + Gewichte) |
+
+
+## Ergänzung Phase E (implementiert und getestet)
+| Ressource | Endpunkte |
+|---|---|
+| Aufgaben | `GET/POST /tasks` (Filter: `status`, `priority`, `overdue`, `open_only`, `q`, Bezüge), `GET/PATCH /tasks/{id}`, `POST /tasks/{id}/status` |
+| Erinnerungen | `GET /reminders`, `POST /reminders/task` (genau eine Aufgabe je Erinnerung) |
+| Reparaturen | `GET/POST /repairs`, `GET/PATCH /repairs/{id}`, `POST …/status`, `…/notes`, `…/invoices` |
+| Kommunikation | `GET/POST /communications` (kein Ändern/Löschen, kein Versand) |
+| Übergabeprotokolle | `GET/POST /handover-protocols` |
+| Historie | `GET /history?entity_type&entity_id` |
+| Dokumente | `GET /documents/search`, `POST /documents/{id}/links`, `POST /documents/{id}/delete` (Weichlöschung), `GET /leases/{id}/missing-documents` |
