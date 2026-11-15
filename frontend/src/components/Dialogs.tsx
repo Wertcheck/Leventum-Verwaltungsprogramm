@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 
 /** Eigene Dialoge statt window.prompt/confirm/alert (in pywebview/WebView2 nicht verlässlich, schlechte Bedienung). */
-export interface AskOptions { title?: string; type?: "text" | "date" | "textarea"; initial?: string; required?: boolean; confirmLabel?: string; danger?: boolean }
+export interface AskOptions { title?: string; type?: "text" | "date" | "textarea" | "password"; initial?: string; required?: boolean; confirmLabel?: string; danger?: boolean }
 export interface ConfirmOptions { title?: string; confirmLabel?: string; danger?: boolean }
 interface Ctx { ask: (message: string, o?: AskOptions) => Promise<string | null>; confirmBox: (message: string, o?: ConfirmOptions) => Promise<boolean>; notify: (message: string) => Promise<void> }
 type Req = { kind: "ask"; message: string; o: AskOptions; resolve: (v: string | null) => void } | { kind: "confirm"; message: string; o: ConfirmOptions; resolve: (v: boolean) => void } | { kind: "notify"; message: string; resolve: () => void };

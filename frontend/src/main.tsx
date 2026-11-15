@@ -2,6 +2,7 @@ import { StrictMode, useCallback, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import "./styles.css";
+import UtilityPage from "./pages/Utility";
 import { DialogProvider } from "./components/Dialogs";
 import { api, ApiError, type User } from "./lib/api";
 import AppShell from "./components/AppShell";
@@ -63,6 +64,7 @@ function App() {
           <Route path="/kautionen" element={<DepositsPage />} />
           <Route path="/mahnwesen" element={<DunningPage />} />
           <Route path="/bankimport" element={<BankPage />} />
+          <Route path="/betriebskosten" element={<UtilityPage />} />
           <Route path="/rechnungen" element={<InvoicesPage />} />
           <Route path="/auswertungen/wirtschaftlichkeit" element={<EconomicsPage />} />
           <Route path="/auswertungen/leerstand" element={<VacancyPage />} />

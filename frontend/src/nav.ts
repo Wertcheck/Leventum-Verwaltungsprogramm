@@ -24,7 +24,7 @@ export const NAV: NavEntry[] = [
     { path: "/mahnwesen", label: "Mahnwesen", icon: "bell" },
     { path: "/bankimport", label: "Bankimport", icon: "file" },
     { path: "/rechnungen", label: "Rechnungen & Belege", icon: "receipt" },
-    { path: "/betriebskosten", label: "Betriebskosten", icon: "calc", phase: "D (nur API)" },
+    { path: "/betriebskosten", label: "Betriebskosten", icon: "calc" },
   ] },
   { label: "Betrieb", icon: "check", children: [
     { path: "/aufgaben", label: "Aufgaben", icon: "check" },
