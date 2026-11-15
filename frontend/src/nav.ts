@@ -19,9 +19,12 @@ export const NAV: NavEntry[] = [
     { path: "/vertraege", label: "Verträge", icon: "file" },
   ] },
   { label: "Finanzen", icon: "euro", children: [
-    { path: "/finanzen", label: "Finanzen", icon: "euro", phase: "D" },
-    { path: "/betriebskosten", label: "Betriebskosten", icon: "calc", phase: "D" },
-    { path: "/rechnungen", label: "Rechnungen & Belege", icon: "receipt", phase: "D" },
+    { path: "/finanzen", label: "Sollstellungen & Zahlungen", icon: "euro" },
+    { path: "/kautionen", label: "Kautionen", icon: "key" },
+    { path: "/mahnwesen", label: "Mahnwesen", icon: "bell" },
+    { path: "/bankimport", label: "Bankimport", icon: "file" },
+    { path: "/rechnungen", label: "Rechnungen & Belege", icon: "receipt" },
+    { path: "/betriebskosten", label: "Betriebskosten", icon: "calc", phase: "D (nur API)" },
   ] },
   { label: "Betrieb", icon: "check", children: [
     { path: "/aufgaben", label: "Aufgaben", icon: "check", phase: "E" },
@@ -29,6 +32,9 @@ export const NAV: NavEntry[] = [
     { path: "/kommunikation", label: "Kommunikation", icon: "chat", phase: "E" },
     { path: "/dokumente", label: "Dokumente", icon: "folder", phase: "E" },
   ] },
-  { path: "/auswertungen", label: "Auswertungen", icon: "chart", phase: "E" },
+  { label: "Auswertungen", icon: "chart", children: [
+    { path: "/auswertungen/wirtschaftlichkeit", label: "Wirtschaftlichkeit", icon: "chart" },
+    { path: "/auswertungen/leerstand", label: "Leerstand", icon: "door" },
+  ] },
   { path: "/einstellungen", label: "Einstellungen", icon: "gear" },
 ];

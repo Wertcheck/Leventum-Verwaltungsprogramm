@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 66" role="img" aria-label="Leventum Real Estate">
-  <!-- PLATZHALTER: Das Original-Logo liegt nicht als Vektordatei vor und ist durch die Originaldatei zu ersetzen. -->
-  <path d="M24 3 4 20v26h40V20z" fill="none" stroke="#0B1F4B" stroke-width="4" stroke-linejoin="round"/>
-  <path d="M14 42V24h7v18" fill="#9AA7C0"/>
-  <text x="54" y="42" font-family="Segoe UI, Arial, sans-serif" font-weight="800" font-size="26" fill="#0B1F4B" letter-spacing="0.5">LEVENTUM</text>
-  <text x="56" y="58" font-family="Segoe UI, Arial, sans-serif" font-weight="700" font-size="9" fill="#0B1F4B" letter-spacing="5.4">REAL ESTATE</text>
-</svg>

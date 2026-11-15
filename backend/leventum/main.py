@@ -11,6 +11,7 @@ from sqlalchemy import select
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from leventum.api.deps import CLIENT_HEADER, current_user
+from leventum.api.finance import router as finance_router
 from leventum.api.master import router as master_router
 from leventum.api.routers import protected, public
 from leventum.config import Settings, get_settings
@@ -85,6 +86,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(protected, prefix="/api/v1", dependencies=[Depends(current_user)])
 
     app.include_router(master_router, prefix="/api/v1", dependencies=[Depends(current_user)])
+    app.include_router(finance_router, prefix="/api/v1", dependencies=[Depends(current_user)])
 
     dist = settings.frontend_dist or (BACKEND_DIR.parent / "frontend" / "dist")
     if dist.is_dir():

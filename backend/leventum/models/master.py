@@ -165,6 +165,7 @@ class Lease(Base, Timestamps):
     legal_reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     parent_lease_id: Mapped[int | None] = mapped_column(ForeignKey("lease.id"))  # optionaler Verweis Unter→Haupt
     coverage_override_reason: Mapped[str | None] = mapped_column(Text)
+    allocation_method: Mapped[str] = mapped_column(String(10), default="area", server_default="area")  # Verteilung der Hauptmiete auf Wohneinheiten
     internal_notes: Mapped[str | None] = mapped_column(Text)
     lease_type: Mapped[LeaseType] = relationship()
     parties: Mapped[list["LeaseParty"]] = relationship(cascade="all, delete-orphan")

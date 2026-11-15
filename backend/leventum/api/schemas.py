@@ -227,3 +227,124 @@ class PrepaymentIn(In):
 
 class StatusIn(In):
     status: Literal["draft", "captured", "reviewed"]
+
+
+# --- Phase D ---
+class ChargeGenerateIn(In):
+    from_month: date
+    through_month: date
+    lease_id: int | None = None
+
+
+class ChargeManualIn(In):
+    lease_id: int
+    amount: Annotated[Decimal, Field(gt=0, decimal_places=2, max_digits=14)]
+    due_date: date
+    period_start: date
+    period_end: date
+    note: str = Field(min_length=1)
+
+
+class VoidIn(In):
+    reason: str = Field(min_length=1)
+
+
+class AllocationIn(In):
+    charge_id: int | None = None
+    invoice_id: int | None = None
+    amount: Annotated[Decimal, Field(gt=0, decimal_places=2, max_digits=14)]
+
+
+class PaymentIn(In):
+    direction: Literal["in", "out"]
+    booking_date: date
+    amount: Annotated[Decimal, Field(gt=0, decimal_places=2, max_digits=14)]
+    counterparty_party_id: int | None = None
+    lease_id: int | None = None
+    property_id: int | None = None
+    method: Literal["bank_transfer", "cash", "direct_debit", "other"] = "bank_transfer"
+    reference: str | None = None
+    note: str | None = None
+    allocations: list[AllocationIn] = []
+    accept_possible_duplicate: bool = False
+
+
+class DeallocIn(AllocationIn):
+    reason: str = Field(min_length=1)
+
+
+class ReverseIn(In):
+    reason: str = Field(min_length=1)
+    booking_date: date | None = None
+
+
+class InvoiceIn(In):
+    property_id: int
+    amount: Annotated[Decimal, Field(gt=0, decimal_places=2, max_digits=14)]
+    invoice_date: date
+    supplier_party_id: int | None = None
+    unit_id: int | None = None
+    cost_type_id: int | None = None
+    invoice_number: str | None = Field(None, max_length=80)
+    due_date: date | None = None
+    description: str | None = Field(None, max_length=300)
+    notes: str | None = None
+
+
+class DepositIn(In):
+    lease_id: int
+    agreed_amount: Amount | None = None
+    due_date: date | None = None
+    note: str | None = None
+
+
+class DepositTxIn(In):
+    kind: Literal["paid", "refunded", "retained"]
+    amount: Annotated[Decimal, Field(gt=0, decimal_places=2, max_digits=14)]
+    transaction_date: date
+    reason: str | None = None
+    note: str | None = None
+
+
+class DunningPrepareIn(In):
+    as_of: date | None = None
+    lease_id: int | None = None
+    grace_days: int = Field(0, ge=0, le=60)
+
+
+class DunningEditIn(In):
+    subject: str | None = Field(None, max_length=300)
+    body: str | None = None
+
+
+class SentIn(In):
+    sent_on: date
+    via: str = Field(min_length=1, max_length=40)
+
+
+class BankAccountIn(In):
+    name: str = Field(min_length=1, max_length=120)
+    iban: str | None = Field(None, max_length=40)
+
+
+class ConfirmIn(In):
+    confirm: Literal[True]  # ausdrückliche manuelle Bestätigung
+    kind: Literal["payment", "deposit"] = "payment"
+    allocations: list[AllocationIn] = []
+    counterparty_party_id: int | None = None
+    lease_id: int | None = None
+    property_id: int | None = None
+    note: str | None = None
+    accept_possible_duplicate: bool = False
+    deposit_id: int | None = None
+    deposit_kind: Literal["paid", "refunded"] | None = None
+    reason: str | None = None
+
+
+class ReasonIn(In):
+    reason: str = Field(min_length=1)
+
+
+class LeaseAllocationIn(In):
+    method: Literal["area", "equal", "custom"]
+    weights: dict[int, Pos] = {}

@@ -33,7 +33,7 @@ class World:
     def ru_bed(self, b): return M.ensure_rentable_unit(self.db, None, property_id=self.prop.id, bed_id=b.id)
 
     def tenant(self, name):
-        first, last = name.split(" ", 1)
+        first, _, last = name.partition(" ")
         return M.create_party(self.db, None, {"kind": "person", "first_name": first, "last_name": last}, ["tenant"])
 
     def main(self, rus=None, start=date(2025, 1, 1), end=None, permitted=True, rent=D("850.00"), nk=D("180.00"), nk_mode="prepayment"):

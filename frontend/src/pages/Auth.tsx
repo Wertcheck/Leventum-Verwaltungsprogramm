@@ -21,7 +21,7 @@ export default function Auth({ setup, onDone }: { setup: boolean; onDone: (u: Us
   return (
     <div className="auth-wrap">
       <Card className="auth-card">
-        <img src="/logo.svg" alt="Leventum Real Estate" />
+        <img src="/logo.png" alt="Leventum Real Estate" />
         <h2>{setup ? "Ersteinrichtung" : "Anmelden"}</h2>
         {setup && <p className="muted">Legen Sie den Administrator-Zugang an. Es gibt kein Standardpasswort. Mindestens 12 Zeichen.</p>}
         <form onSubmit={submit} style={{ display: "contents" }}>

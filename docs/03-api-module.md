@@ -37,3 +37,17 @@ Konventionen: JSON, ISO-8601, Geld als String-Dezimal (`"1150.00"`), Fehler als 
 | Suche | `GET /search?q=` (Parteien, Objekte, Wohneinheiten, Verträge) |
 
 Geldbeträge und Flächen sind JSON-Strings mit 2 Nachkommastellen. Validierungsfehler beim Aktivieren: HTTP 422 mit `detail.details.{errors,warnings,hints}`. Rechte: `master:read/write` (Stammdaten/Verträge), `finance:read/write` (Nebenkosten).
+
+
+## Ergänzung Phase D (implementiert und getestet)
+| Ressource | Endpunkte |
+|---|---|
+| Sollstellungen | `GET /charges`, `POST /charges/generate` (idempotent), `POST /charges` (manuell, Begründung), `POST /charges/{id}/void` |
+| Zahlungen | `GET/POST /payments`, `POST /payments/{id}/allocations`, `/deallocate`, `/reverse` (Storno per Gegenbuchung) |
+| Rechnungen | `GET/POST /invoices`, `POST /invoices/{id}/void` |
+| Dokumente | `POST /documents` (multipart), `GET /documents?entity_type&entity_id`, `GET /documents/{id}/download` (nur angemeldet) |
+| Kautionen | `GET/POST /deposits`, `GET /deposits/{id}`, `POST /deposits/{id}/transactions`, `POST /deposit-transactions/{id}/void` |
+| Mahnwesen | `GET /dunning/overdue`, `POST /dunning/prepare`, `GET /dunning/notices[/{id}]`, `PATCH …`, `POST …/approve`, `…/mark-sent`, `…/cancel` |
+| Bankimport | `GET/POST /bank/accounts`, `POST /bank/imports/preview`, `POST /bank/imports`, `GET /bank/imports`, `GET /bank/transactions` (`suggestions`, `only_unmatched`), `POST …/{id}/confirm` (Pflichtfeld `confirm: true`), `…/ignore`, `…/reopen` |
+| Auswertungen | `GET /economics?scope=portfolio|property|unit|rentable_unit&id&start&end`, `GET /vacancy?start&end&property_id` |
+| Hauptmiete | `PUT /leases/{id}/allocation` (Methode area/equal/custom + Gewichte) |

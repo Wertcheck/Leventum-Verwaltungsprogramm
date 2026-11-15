@@ -43,3 +43,11 @@ Nicht implementiert (offen): Verschlüsselung der Backups, Aufbewahrungsrotation
 
 ## 4. Export/Migration (Serverumzug)
 Geplant Phase F: Logischer Export (JSON/CSV je Tabelle + Dokumentenarchiv mit Manifest) und Import über ORM in PostgreSQL. Alembic-Schema-Revision im Manifest verhindert Import in falsche Schemastände.
+
+
+## Ergänzung Phase D
+* **Bankimport:** Es werden ausschließlich lokale Dateien verarbeitet; keine Zugangsdaten, keine Netzwerkzugriffe. Upload ≤ 5 MB, ≤ 20.000 Zeilen, Steuerzeichen werden entfernt, Beträge/IBAN/Datum streng validiert; fehlerhafte Dateien werden vollständig abgelehnt. Bankkonten speichern nur Name/IBAN als Kennung.
+* **Bestätigungspflicht:** Eine Bankbuchung wird nur durch `POST …/confirm` mit `confirm: true` zur Zahlung (Test: ohne Flag HTTP 422, keine Zahlung).
+* **Dokumente:** Download nur authentifiziert (`Content-Disposition: attachment`, `nosniff`); Typ/Größe/Magic-Bytes-Prüfung; zufällige Speicherschlüssel. Dokumente sind im Backup enthalten (bestehender Backup-Mechanismus).
+* **Unveränderlichkeit:** Zahlungen, Zuordnungen, Kautionsbuchungen sind append-only/Storno; Audit für jeden Schritt. Schutz auf Anwendungsebene, nicht auf Datenbankebene.
+* Mahnwesen: Es existiert kein Versandcode (E-Mail/Post).

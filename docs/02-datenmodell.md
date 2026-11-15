@@ -29,9 +29,9 @@ Zwei Rechnungen, strikt getrennt dargestellt:
 
 * **Mietmarge (Kaltmiete):** Σ Unter-Kaltmiete (Soll) − Σ Haupt-Kaltmiete (Soll, auf Einheiten verteilt).
 * **Nebenkosten-Durchlauf:** Σ NK-Vorauszahlungen Unter − Σ NK-Vorauszahlungen Haupt. Das ist **keine** Marge, sondern ein offener Saldo bis zur Abrechnung beider Ebenen.
-* **Vorläufiger Deckungsbeitrag (Soll-Basis)** = Mietmarge + NK-Durchlauf-Saldo − objektbezogene Kosten (Rechnungen) − Leerstandskosten.
+* **Vorläufiger Deckungsbeitrag (Soll-Basis)** = Mietmarge + NK-Durchlauf-Saldo − objektbezogene Kosten (Rechnungen). *(Korrektur in Phase D: Der frühere Zusatz „− Leerstandskosten“ war eine Doppelzählung, weil das Hauptmiete-Soll die Leerstandszeiten bereits enthält. Leerstandskosten sind nur eine Teilmenge der Hauptmietkosten.)*
 * **Zahlungsbasierter Deckungsbeitrag (Ist-Basis)** = Zahlungseingänge − Zahlungsausgänge im Zeitraum.
-* **Leerstandskosten** = anteilige Haupt-Gesamtmiete (Kalt + NK) der Einheit für Tage ohne aktiven Untermietvertrag *innerhalb* eines aktiven Hauptmietvertrags (tagesgenau, Konvention siehe Offene Entscheidungen).
+* **Leerstandskosten** (Ausweisung, kein weiterer Abzug) = anteilige Haupt-Gesamtmiete (Kalt + NK) der kleinsten Einheit für Tage ohne laufenden Untermietvertrag *innerhalb* eines Hauptmietvertrags (tagesgenau). Details: `08-phase-d-konzept.md`.
 * Die Ausweisung heißt **„vorläufiger Deckungsbeitrag“**, nie „Gewinn“.
 
 Hauptmiete auf Objektebene → Einheiten: `allocation_rule` (Methode: Wohnfläche / gleichmäßig / individuelle Gewichte). Rundung per **Largest-Remainder-Verfahren**, sodass die Summe der Teilbeträge exakt der Gesamtmiete entspricht. Regel ist versioniert (gültig ab), die Methode steht im Bericht.

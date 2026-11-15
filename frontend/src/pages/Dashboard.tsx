@@ -7,7 +7,7 @@ import { Icons } from "../components/icons";
 const ICONS: Record<string, keyof typeof Icons> = {
   properties: "building", units: "door", active_main_leases: "file", active_subleases: "contract", active_tenants: "users",
   main_rent_obligations: "euro", sublease_receivables: "euro", open_receivables: "receipt", overdue_payments: "bell",
-  monthly_utility_costs: "calc", open_tasks: "check", upcoming_contract_ends: "key",
+  monthly_utility_costs: "calc", physical_vacancy: "door", economic_vacancy_cost: "euro", open_tasks: "check", upcoming_contract_ends: "key",
 };
 
 export default function Dashboard({ user }: { user: User }) {
@@ -27,7 +27,7 @@ export default function Dashboard({ user }: { user: User }) {
       <div className="grid kpis">
         {data?.kpis.map((k) => {
           const I = Icons[ICONS[k.key] ?? "home"];
-          return <KpiCard key={k.key} icon={<I size={28} />} label={k.label} value={k.value} available={k.available} hint={`verfügbar ab Phase ${k.planned_phase}`} />;
+          return <KpiCard key={k.key} icon={<I size={28} />} label={k.label} value={k.value} available={k.available} format={k.format} hint={`verfügbar ab Phase ${k.planned_phase}`} />;
         })}
       </div>
       <div className="grid two-col">

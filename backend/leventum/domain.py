@@ -38,3 +38,17 @@ COST_TYPE_SEEDS = [
     "Straßenreinigung / Müllbeseitigung", "Gebäudereinigung", "Gartenpflege", "Allgemeinstrom",
     "Schornsteinfeger", "Versicherungen", "Hauswart", "Kabel / Antenne", "Sonstige Kosten",
 ]
+
+# --- Phase D ---
+CHARGE_DIRECTIONS = ("receivable", "payable")
+CHARGE_TYPES = ("base_rent", "other_charges", "utility_prepayment", "utility_flat_rate", "other")
+PAYMENT_DIRECTIONS = ("in", "out")
+PAYMENT_METHODS = ("bank_transfer", "cash", "direct_debit", "other")
+DEPOSIT_TX_KINDS = ("paid", "refunded", "retained")
+DUNNING_STATUS = ("draft", "approved", "sent", "cancelled")
+DUNNING_LEVELS = {1: "Zahlungserinnerung", 2: "Erste Mahnung", 3: "Zweite Mahnung"}
+ALLOCATION_METHODS = ("area", "equal", "custom")
+BANK_TX_STATUS = ("open", "confirmed", "ignored")
+DOC_TYPES = ("mietvertrag", "nachtrag", "uebergabeprotokoll", "rechnung", "betriebskostenabrechnung", "schriftverkehr",
+             "versicherung", "reparaturbeleg", "kaution", "sonstige")
+DOC_ENTITIES = ("party", "property", "unit", "lease", "invoice", "deposit", "deposit_transaction", "payment")

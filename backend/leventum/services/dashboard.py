@@ -18,6 +18,8 @@ KPI_DEFINITIONS = [
     ("overdue_payments", "Überfällige Zahlungen", "D"),
     ("monthly_utility_costs", "Monatliche Betriebskosten", "D"),
     ("open_tasks", "Offene Aufgaben", "E"),
+    ("physical_vacancy", "Physischer Leerstand (unbelegte Betten/Zimmer/Einheiten)", "D"),
+    ("economic_vacancy_cost", "Wirtschaftlicher Leerstand (Kosten, laufender Monat)", "D"),
     ("upcoming_contract_ends", "Anstehende Vertragsenden", "C"),
 ]
 
@@ -47,8 +49,22 @@ def _upcoming_ends(db):
                if (e := effective_end(lease)) is not None and today <= e <= horizon)
 
 
-# Implementierte Zähler: key -> Funktion(db) -> int
+def _fig(db):
+    from leventum.services.economics import current_month_figures
+    return current_month_figures(db)
+
+
+# Implementierte Kennzahlen: key -> (Funktion(db) -> Wert, Format). Geld als String-Dezimal.
+IMPLEMENTED_MONEY: dict = {
+    "main_rent_obligations": lambda db: _fig(db)["main_total"],
+    "sublease_receivables": lambda db: _fig(db)["sub_total"],
+    "open_receivables": lambda db: _fig(db)["open_receivables"],
+    "monthly_utility_costs": lambda db: _fig(db)["main_utility"],
+    "economic_vacancy_cost": lambda db: _fig(db)["economic_vacancy_cost"],
+}
 IMPLEMENTED: dict = {
+    "overdue_payments": lambda db: _fig(db)["overdue_count"],
+    "physical_vacancy": lambda db: _fig(db)["vacant_leaves"],
     "properties": lambda db: db.scalar(select(func.count()).select_from(Property).where(Property.is_active.is_(True))),
     "units": lambda db: db.scalar(select(func.count()).select_from(Unit).where(Unit.is_active.is_(True))),
     "active_main_leases": lambda db: len(_running(db, "main")),
@@ -62,7 +78,9 @@ def build_dashboard(db: Session) -> dict:
     kpis = []
     for key, label, phase in KPI_DEFINITIONS:
         fn = IMPLEMENTED.get(key)
-        if fn is None:
+        if key in IMPLEMENTED_MONEY:
+            kpis.append({"key": key, "label": label, "value": format(IMPLEMENTED_MONEY[key](db), "f"), "format": "eur", "available": True, "planned_phase": phase})
+        elif fn is None:
             kpis.append({"key": key, "label": label, "value": None, "available": False, "planned_phase": phase})
         else:
             kpis.append({"key": key, "label": label, "value": fn(db), "available": True, "planned_phase": phase})

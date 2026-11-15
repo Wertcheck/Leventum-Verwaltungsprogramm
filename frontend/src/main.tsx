@@ -11,6 +11,13 @@ import Settings from "./pages/Settings";
 import { OwnersPage, PartyDetail, TenantsPage } from "./pages/Parties";
 import { PropertiesPage, PropertyDetail, UnitsPage } from "./pages/Properties";
 import { LeaseDetail, LeasesPage } from "./pages/Leases";
+import FinancePage from "./pages/Finance";
+import DepositsPage from "./pages/Deposits";
+import DunningPage from "./pages/Dunning";
+import BankPage from "./pages/Bank";
+import InvoicesPage from "./pages/Invoices";
+import EconomicsPage from "./pages/Economics";
+import VacancyPage from "./pages/Vacancy";
 import { NAV, isGroup, type NavLeaf } from "./nav";
 
 type State = { kind: "loading" } | { kind: "setup" } | { kind: "login" } | { kind: "ready"; user: User } | { kind: "error"; msg: string };
@@ -47,6 +54,13 @@ function App() {
           <Route path="/mietverhaeltnisse" element={<LeasesPage kind="sub" title="Mietverhältnisse" />} />
           <Route path="/vertraege" element={<LeasesPage title="Verträge" />} />
           <Route path="/vertraege/:id" element={<LeaseDetail />} />
+          <Route path="/finanzen" element={<FinancePage />} />
+          <Route path="/kautionen" element={<DepositsPage />} />
+          <Route path="/mahnwesen" element={<DunningPage />} />
+          <Route path="/bankimport" element={<BankPage />} />
+          <Route path="/rechnungen" element={<InvoicesPage />} />
+          <Route path="/auswertungen/wirtschaftlichkeit" element={<EconomicsPage />} />
+          <Route path="/auswertungen/leerstand" element={<VacancyPage />} />
           {LEAVES.map((l) => <Route key={l.path} path={l.path} element={<Placeholder title={l.label} phase={l.phase!} />} />)}
           <Route path="*" element={<Placeholder title="Seite nicht gefunden" phase="–" />} />
         </Route>

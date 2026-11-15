@@ -12,13 +12,15 @@ export const EmptyState = ({ title, children }: { title: string; children?: Reac
   <div className="empty"><strong>{title}</strong>{children}</div>
 );
 
-export function KpiCard({ icon, label, value, available, hint }: { icon: ReactNode; label: string; value: number | null; available: boolean; hint?: string }) {
+export const eurText = (v: string) => Number(v).toLocaleString("de-DE", { style: "currency", currency: "EUR" });
+
+export function KpiCard({ icon, label, value, available, hint, format }: { icon: ReactNode; label: string; value: number | string | null; available: boolean; hint?: string; format?: string }) {
   return (
     <Card className="kpi">
       <div className="ic">{icon}</div>
       <div>
         <div className="label">{label}</div>
-        <div className={`value ${available ? "" : "na"}`} data-testid={`kpi-${label}`}>{available && value !== null ? value : "–"}</div>
+        <div className={`value ${available ? "" : "na"}`} data-testid={`kpi-${label}`}>{available && value !== null ? (format === "eur" ? eurText(String(value)) : value) : "–"}</div>
         {!available && hint && <div className="hint">{hint}</div>}
       </div>
     </Card>

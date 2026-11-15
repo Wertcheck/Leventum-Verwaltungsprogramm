@@ -236,5 +236,5 @@ def test_statement_creation_does_not_touch_subleases_or_create_claims(w):
     snapshot = [(a.mode, a.monthly_amount, a.settlement_agreed) for a in sub.utility_agreements]
     U.compare_with_downstream(w.db, st.id); U.compute_statement(w.db, st.id); U.allocate_statement(w.db, st.id)
     assert snapshot == [(a.mode, a.monthly_amount, a.settlement_agreed) for a in sub.utility_agreements]
-    import sqlalchemy as sa
-    assert "charge" not in sa.inspect(w.db.get_bind()).get_table_names()  # es gibt (noch) keine Forderungstabelle
+    from leventum.models import Charge
+    assert w.db.scalar(select(__import__("sqlalchemy").func.count()).select_from(Charge)) == 0  # keine Sollstellung/Forderung entstanden

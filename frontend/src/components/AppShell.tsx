@@ -11,7 +11,7 @@ function Sidebar() {
   const settings = NAV[NAV.length - 1];
   return (
     <aside className="sidebar" aria-label="Hauptnavigation">
-      <div className="logo"><img src="/logo.svg" alt="Leventum Real Estate" /></div>
+      <div className="logo"><img src="/logo.png" alt="Leventum Real Estate" /></div>
       {NAV.slice(0, -1).map((e) => {
         if (!isGroup(e)) {
           const I = Icons[e.icon];
