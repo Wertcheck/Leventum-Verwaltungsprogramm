@@ -11,6 +11,7 @@ from leventum.config import Settings
 from leventum.main import create_app
 from leventum.models import Charge
 from leventum.services import charges as C, leases as L, master as M, payments as P
+from leventum.services.errors import ServiceError
 from tests.conftest import PW
 from tests.helpers import World
 
@@ -396,12 +397,55 @@ def test_overpayment_is_not_netted_across_charges(fin, auth_client):
     assert r["open_total"] == D("200.00") and r["overdue_count"] == 1
 
 
-def test_overpaid_charge_cannot_go_negative(fin, auth_client):
+def test_overpayment_cannot_create_negative_netting(fin, auth_client):
+    """Überzahlung: Zahlung 130 auf Forderung 100. Die Zuordnung über den offenen Betrag hinaus scheitert (exceeds_open, 409);
+    die nicht zugeordneten 30 erscheinen nirgends als negativer Betrag, open_total bleibt Restbetrag der anderen Forderung (A7)."""
     c = fin.charge("100.00", d(-20))
-    fin.pay("100.00", d(-5), (c, "100.00"))
-    fin.charge("50.00", d(-1))  # eine weitere, offene Forderung
+    fin.charge("50.00", d(-1))
+    p = fin.pay("130.00", d(-5), (c, "100.00"))
     put(fin)
-    assert pos(fin.w.db)["open_total"] == D("50.00")
+    with pytest.raises(ServiceError) as ei:
+        P.allocate(fin.w.db, None, p.id, charge_id=c.id, amount=D("30.00"))  # Forderung c ist voll bezahlt, offen 0,00
+    assert ei.value.code == "exceeds_open" and ei.value.status == 409
+    put(fin)
+    assert C.allocated(fin.w.db, c.id) == D("100.00")  # keine Zuordnung über den Forderungsbetrag hinaus entstanden
+    assert P.unallocated(fin.w.db, fin.w.db.get(type(p), p.id)) == D("30.00")  # Rest bleibt unzugeordnet (kein Guthaben-Verrechnen)
+    r = pos(fin.w.db)
+    assert r["open_total"] == D("50.00") and r["overdue_count"] == 1 and r["open_total"] >= 0  # nicht 20,00 (= 50 - 30)
+    assert val(auth_client, "open_receivables") == "50.00" and val(auth_client, "overdue_payments") == 1
+    assert pos(fin.w.db, d(-6))["open_total"] == D("150.00")  # vor der Zahlung beide Forderungen voll offen (100 + 50)
+
+
+def test_overpaid_allocation_at_payment_creation_is_rejected_and_leaves_no_negative(fin, auth_client):
+    """Zahlung 150 mit Zuordnung 150 auf Forderung 100 wird abgewiesen; nach Rollback bleibt die Forderung voll offen (100,00)."""
+    c = fin.charge("100.00", d(-20))
+    put(fin)
+    with pytest.raises(ServiceError) as ei:
+        fin.pay("150.00", d(-5), (c, "150.00"))
+    assert ei.value.code == "exceeds_open"
+    fin.w.db.rollback()
+    put(fin)
+    assert pos(fin.w.db)["open_total"] == D("100.00") and C.allocated(fin.w.db, c.id) == D("0.00")
+    assert val(auth_client, "open_receivables") == "100.00"
+
+
+def test_fully_paid_charge_with_unallocated_surplus_is_zero_not_negative(fin, auth_client):
+    c = fin.charge("100.00", d(-20))
+    fin.pay("130.00", d(-5), (c, "100.00"))
+    put(fin)
+    assert pos(fin.w.db)["open_total"] == D("0.00") and val(auth_client, "open_receivables") == "0.00"
+
+
+# Befund F1 (vorbestehende Semantik, auch in charges.open_amount): Storno VOR Originalzahlung -> offen > Forderungsbetrag.
+@pytest.mark.xfail(strict=True, reason="Befund F1: Storno vor Originalzahlung führt zu offen > Forderungsbetrag – Entscheidung ausstehend")
+def test_f1_reversal_booked_before_original_payment_never_exceeds_charge(fin, auth_client):
+    """Forderung 600 (fällig -30); Zahlung 600 gebucht -5; Storno mit Buchungsdatum -20 (vor der Originalzahlung).
+    Stichtag -10: Storno (-600) wirkt, Original (+600) noch nicht -> real offen 1200. Erwünscht: offen <= Forderungsbetrag 600."""
+    c = fin.charge("600.00", d(-30))
+    p = fin.pay("600.00", d(-5), (c, "600.00"))
+    P.reverse_payment(fin.w.db, None, p.id, reason="Fehlbuchung", booking_date=d(-20))
+    put(fin)
+    assert pos(fin.w.db, d(-10))["open_total"] <= D("600.00")
 
 
 def test_future_due_charge_counts_to_open_but_not_to_overdue(fin, auth_client):
@@ -478,21 +522,233 @@ def test_dashboard_requires_login(client):
 
 
 def test_month_figures_computed_exactly_once_per_call_with_as_of(world, auth_client, monkeypatch):
+    """dashboard._fig cached je Request unter ("_fig", as_of); die vier Monats-KPIs teilen sich dadurch GENAU EINE Berechnung.
+    Exakt 1 (nicht 0: die KPIs main_rent_obligations u. a. werden immer berechnet; nicht >1: Cache). Die Monatswerte beziehen
+    sich immer auf den heutigen Monat (ADR 0002 A6), as_of ändert sie daher nicht."""
     from leventum.services import economics as E
     calls = []
     original = E.current_month_figures
     monkeypatch.setattr(E, "current_month_figures", lambda *a, **kw: (calls.append(1), original(*a, **kw))[1])
-    assert auth_client.get(V + "/dashboard").status_code == 200
+    today_kpis = kpis(auth_client)
     assert len(calls) == 1
-    calls.clear()
-    assert auth_client.get(V + "/dashboard", params={"as_of": d(-3).isoformat()}).status_code == 200
-    assert len(calls) <= 1  # as_of darf die teure Monatsauswertung nicht vervielfachen
+    month_keys = ("main_rent_obligations", "sublease_receivables", "monthly_utility_costs", "economic_vacancy_cost", "physical_vacancy")
+    for as_of in (d(-3), d(-200), TODAY):
+        calls.clear()
+        k = kpis(auth_client, as_of=as_of.isoformat())
+        assert len(calls) == 1, as_of
+        assert all(k[key]["value"] == today_kpis[key]["value"] for key in month_keys)
+        assert all(k[key]["historical_supported"] is False for key in month_keys)
+    assert today_kpis["main_rent_obligations"]["value"] != "0.00"  # Kontrolle: Wert nicht trivial (Hauptmiete 850 + 180 NK, tagesanteilig)
+
+
+@pytest.mark.parametrize("role", ["admin", "verwaltung", "buchhaltung", "objektbetreuung", "lesend"])
+def test_dashboard_read_permission_all_roles_with_and_without_as_of(app, auth_client, role):
+    """Jede Rolle liest /dashboard mit Statuscode 200 (ohne und mit as_of, Antwort trägt den Stichtag)."""
+    from sqlalchemy import select
+    from leventum.models import AppUser, Role
+    from leventum.security.passwords import hash_password
+    with app.state.session_factory() as db:
+        db.add(AppUser(username=f"u_{role}", display_name=role, password_hash=hash_password(PW), role_id=db.scalar(select(Role.id).where(Role.code == role))))
+        db.commit()
+    c = TestClient(app, headers={"X-Leventum-Client": "1"})
+    assert c.post(V + "/auth/login", json={"username": f"u_{role}", "password": PW}).status_code == 200
+    past = d(-7).isoformat()
+    r1, r2 = c.get(V + "/dashboard"), c.get(V + "/dashboard", params={"as_of": past})
+    assert r1.status_code == 200 and r2.status_code == 200
+    assert r1.json()["as_of"] == TODAY.isoformat() and r2.json()["as_of"] == past
+    assert c.get(V + "/dashboard", params={"as_of": d(1).isoformat()}).status_code == 422  # Recht vorhanden, Zukunft weiter abgelehnt
+
+
+def test_dashboard_as_of_requires_same_right_as_without(app, auth_client, monkeypatch):
+    """Ohne Login 401 (auch mit as_of). Entzug des Rechts dashboard:read -> 403, gleichermaßen ohne und mit as_of (kein Seitenpfad)."""
+    from sqlalchemy import select
+    from leventum.models import AppUser, Role
+    from leventum.security import permissions as perms
+    from leventum.security.passwords import hash_password
+    anon = TestClient(app, headers={"X-Leventum-Client": "1"})
+    assert anon.get(V + "/dashboard").status_code == 401
+    assert anon.get(V + "/dashboard", params={"as_of": d(-7).isoformat()}).status_code == 401
+    with app.state.session_factory() as db:
+        db.add(AppUser(username="leser2", display_name="L", password_hash=hash_password(PW), role_id=db.scalar(select(Role.id).where(Role.code == "lesend"))))
+        db.commit()
+    c = TestClient(app, headers={"X-Leventum-Client": "1"})
+    assert c.post(V + "/auth/login", json={"username": "leser2", "password": PW}).status_code == 200
+    assert c.get(V + "/dashboard", params={"as_of": d(-7).isoformat()}).status_code == 200
+    monkeypatch.setitem(perms.ROLE_PERMISSIONS, "lesend", {"master:read"})
+    assert c.get(V + "/dashboard").status_code == 403
+    assert c.get(V + "/dashboard", params={"as_of": d(-7).isoformat()}).status_code == 403
+    assert c.get(V + "/dashboard", params={"as_of": d(1).isoformat()}).status_code == 403  # Recht wird vor der Stichtagsprüfung geprüft
 
 
 def test_dashboard_read_permission_unchanged_for_all_roles():
     """Das Recht dashboard:read bleibt unverändert; die Routenabdeckung prüft die bestehende Rechte-Suite."""
     from leventum.security.permissions import ROLE_PERMISSIONS, has_permission
     assert all(has_permission(role, "dashboard:read") for role in ROLE_PERMISSIONS)
+
+
+# ---------------------------------------------------------------------------------------------------------------------------------
+# T3: contract_end_due mit nicht-heutigem Stichtag (Service)
+# ---------------------------------------------------------------------------------------------------------------------------------
+@pytest.mark.parametrize("as_of_off,expected_end", [
+    (-101, None),  # Vertrag (Beginn -100) läuft noch nicht
+    (-100, None),  # Beginntag: läuft, Ende in 130 Tagen > 90
+    (-61, None),   # Ende in 91 Tagen
+    (-60, 30),     # Ende in genau 90 Tagen (Grenze inklusiv)
+    (0, 30),       # heute: Ende in 30 Tagen
+    (30, 30),      # Stichtag = Ende (inklusiv, läuft am letzten Tag noch)
+    (31, None),    # Ende liegt vor dem Stichtag, Vertrag läuft nicht mehr
+])
+def test_contract_end_due_historical_and_shifted_as_of_service(world, as_of_off, expected_end):
+    lease = end_lease(world, d(30), start=d(-100))
+    got = L.contract_end_due(lease, d(as_of_off), 90)
+    assert got == (None if expected_end is None else d(expected_end))
+
+
+def test_contract_end_due_future_start_lease_at_various_as_of_service(world):
+    lease = end_lease(world, d(60), start=d(10))
+    assert L.contract_end_due(lease, d(-30), 90) is None  # vor Beginn: nicht laufend, auch wenn Ende in 90 Tagen läge
+    assert L.contract_end_due(lease, d(9), 90) is None    # Vortag des Beginns
+    assert L.contract_end_due(lease, d(10), 90) == d(60)  # Beginntag
+    assert L.contract_end_due(lease, d(10), 49) is None and L.contract_end_due(lease, d(10), 50) == d(60)
+    assert L.contract_end_due(lease, d(61), 90) is None
+
+
+def test_upcoming_ends_list_respects_as_of_service(world):
+    a = end_lease(world, d(-10), start=d(-100), unit="room1")
+    b = end_lease(world, d(40), start=d(-20), unit="room2")
+    world.db.commit()
+    assert {x.id: e for x, e in L.upcoming_ends(world.db, d(-30), 90) if x.kind == "sub"} == {a.id: d(-10)}  # b beginnt erst -20
+    assert {x.id: e for x, e in L.upcoming_ends(world.db, TODAY, 90) if x.kind == "sub"} == {b.id: d(40)}   # a ist heute beendet
+
+
+# ---------------------------------------------------------------------------------------------------------------------------------
+# T2: API mit as_of in der Vergangenheit für Vertrags-KPIs
+# ---------------------------------------------------------------------------------------------------------------------------------
+def test_contract_kpis_and_hint_with_historical_as_of(app, auth_client):
+    """Von Hand (Haupt­vertrag ab -250, offen):
+    A room1: -100..-10 (läuft zum Stichtag -30/-15, heute beendet) | B room2: -20..+40 (beginnt nach Stichtag -30, läuft heute)
+    C we2: ab -200, offen, gekündigt (Kündigung -5, wirksam +20). Vorschau 90 Tage.
+      Stichtag -260: Hauptvertrag noch nicht begonnen -> alles 0.
+      Stichtag -150: nur C läuft (1 Sub, 1 Mieter, Hint 1), Ende +20 liegt > 90 Tage nach -150 -> 0 anstehende Enden.
+      Stichtag  -30: A, C laufen (B nicht) -> 2/2, Enden A (-10), C (+20) -> 2, Hint 1.
+      Stichtag  -15: A, B, C laufen -> 3/3, Enden 3, Hint 1.
+      heute        : B, C laufen (A beendet) -> 2/2, Enden B (+40), C (+20) = 2."""
+    w = World(app)
+    w.activate_main(start=d(-250))
+    end_lease(w, d(-10), start=d(-100), unit="room1")
+    end_lease(w, d(40), start=d(-20), unit="room2")
+    c_lease = end_lease(w, None, start=d(-200), unit="we2")
+    L.terminate_lease(w.db, None, c_lease.id, terminated_on=d(-5), effective_on=d(20))
+    w.db.commit()
+    try:
+        def at(off):
+            return kpis(auth_client) if off is None else kpis(auth_client, as_of=d(off).isoformat())
+        expected = {  # off -> (main, subs, tenants, ends, hint_subs, hint_tenants)
+            -260: (0, 0, 0, 0, None, None),
+            -150: (1, 1, 1, 0, "davon 1 in Kündigung", "davon 1 in Kündigung"),
+            -30: (1, 2, 2, 2, "davon 1 in Kündigung", "davon 1 in Kündigung"),
+            -15: (1, 3, 3, 3, "davon 1 in Kündigung", "davon 1 in Kündigung"),
+            None: (1, 2, 2, 2, "davon 1 in Kündigung", "davon 1 in Kündigung"),
+        }
+        for off, (main, subs, ten, ends, h_subs, h_ten) in expected.items():
+            k = at(off)
+            got = (k["active_main_leases"]["value"], k["active_subleases"]["value"], k["active_tenants"]["value"], k["upcoming_contract_ends"]["value"],
+                   k["active_subleases"]["hint"], k["active_tenants"]["hint"])
+            assert got == (main, subs, ten, ends, h_subs, h_ten), off
+            assert all(k[x]["historical_supported"] is True for x in ("active_main_leases", "active_subleases", "active_tenants", "upcoming_contract_ends"))
+    finally:
+        w.db.close()
+
+
+def test_main_lease_end_counts_only_within_window_of_historical_as_of(app, auth_client):
+    w = World(app)
+    w.activate_main(start=d(-250), end=d(-100))  # Hauptvertrag endete vor 100 Tagen
+    w.db.commit()
+    try:
+        assert val(auth_client, "active_main_leases") == 0 and val(auth_client, "upcoming_contract_ends") == 0  # heute beendet
+        assert val(auth_client, "active_main_leases", as_of=d(-150).isoformat()) == 1
+        assert val(auth_client, "upcoming_contract_ends", as_of=d(-150).isoformat()) == 1  # Ende -100 liegt 50 Tage nach dem Stichtag
+        assert val(auth_client, "upcoming_contract_ends", as_of=d(-191).isoformat()) == 0  # 91 Tage vorher: außerhalb
+        assert val(auth_client, "upcoming_contract_ends", as_of=d(-190).isoformat()) == 1  # genau 90 Tage: inklusiv
+        assert val(auth_client, "active_main_leases", as_of=d(-99).isoformat()) == 0
+    finally:
+        w.db.close()
+
+
+# ---------------------------------------------------------------------------------------------------------------------------------
+# T4: mehrere Verträge und Forderungen bei historischem Stichtag
+# ---------------------------------------------------------------------------------------------------------------------------------
+def test_multi_lease_multi_charge_historical_totals_and_overdue_by_lease(world, auth_client):
+    """Vertrag 1 (room1): a1 500 fällig -50, a2 300 fällig -20, a3 200 fällig +10. Vertrag 2 (room2): b1 400 fällig -45, b2 100 fällig -5.
+    Zahlungen: p1 500 (Buchung -40) -> a1; p2 150 (-15) -> a2; p3 400 (-3) -> b1. Alle Werte von Hand je Stichtag:
+      -60: offen 1500 (500+300+200+400+100), überfällig 0 (keine Fälligkeit < -60)
+      -44: offen 1500, überfällig 2 (a1 -50, b1 -45)
+      -30: p1 gebucht: offen 1000 (300+200+400+100), überfällig 1 (nur b1; a2 fällig -20 !< -30)
+      -10: p2 gebucht: offen 850 (150+200+400+100), überfällig 2 (a2 Rest 150, b1 400; b2 fällig -5 !< -10)
+       -2: p3 gebucht: offen 450 (150+200+100), überfällig 2 (a2 150, b2 100)
+       heute: wie -2."""
+    w = world
+    fin1 = Fin(w)
+    tenant2 = w.tenant("Zwei Mieter")
+    lease2 = w.sub([w.ru_room(w.room2)], [tenant2], d(-400), None, nk_mode=None)
+
+    def charge(lease, amount, due):
+        return C.create_manual_charge(w.db, None, lease_id=lease.id, amount=D(amount), due_date=due, period_start=due, period_end=due + timedelta(days=29), note="T4")
+    a1, a2, a3 = (charge(fin1.lease, "500.00", d(-50)), charge(fin1.lease, "300.00", d(-20)), charge(fin1.lease, "200.00", d(10)))
+    b1, b2 = charge(lease2, "400.00", d(-45)), charge(lease2, "100.00", d(-5))
+    fin1.pay("500.00", d(-40), (a1, "500.00"))
+    fin1.pay("150.00", d(-15), (a2, "150.00"))
+    P.create_payment(w.db, None, direction="in", booking_date=d(-3), amount=D("400.00"), counterparty_party_id=tenant2.id, lease_id=lease2.id,
+                     reference="T4-b1", allocations=[{"charge_id": b1.id, "amount": D("400.00")}])
+    assert b2.id and a3.id
+    put(fin1)
+    l1, l2 = fin1.lease.id, lease2.id
+    cases = [  # (Stichtag-Offset, offen, überfällig, overdue_by_lease)
+        (-60, "1500.00", 0, {}),
+        (-44, "1500.00", 2, {l1: [(d(-50), D("500.00"))], l2: [(d(-45), D("400.00"))]}),
+        (-30, "1000.00", 1, {l2: [(d(-45), D("400.00"))]}),
+        (-10, "850.00", 2, {l1: [(d(-20), D("150.00"))], l2: [(d(-45), D("400.00"))]}),
+        (-2, "450.00", 2, {l1: [(d(-20), D("150.00"))], l2: [(d(-5), D("100.00"))]}),
+        (0, "450.00", 2, {l1: [(d(-20), D("150.00"))], l2: [(d(-5), D("100.00"))]}),
+    ]
+    for off, open_total, overdue, by_lease in cases:
+        r = pos(w.db, d(off))
+        assert r["open_total"] == D(open_total), off
+        assert r["overdue_count"] == overdue, off
+        assert r["overdue_by_lease"] == by_lease, off
+        k = kpis(auth_client, as_of=d(off).isoformat())
+        assert k["open_receivables"]["value"] == open_total and k["overdue_payments"]["value"] == overdue, off
+        assert sum(len(v) for v in r["overdue_by_lease"].values()) == r["overdue_count"]
+
+
+# ---------------------------------------------------------------------------------------------------------------------------------
+# T5: POST /reminders/task mit konfiguriertem Vorschauzeitraum
+# ---------------------------------------------------------------------------------------------------------------------------------
+@pytest.mark.parametrize("days,end_off,created", [(30, 40, False), (39, 40, False), (40, 40, True), (60, 40, True)])
+def test_reminder_to_task_respects_configured_preview_days(tmp_path, days, end_off, created):
+    """Aufgabe nur, wenn die contract_end-Erinnerung im konfigurierten Fenster liegt (Grenze inklusiv); sonst 404 not_found, keine Aufgabe."""
+    app, c = make_client(tmp_path, days)
+    try:
+        w = World(app)
+        w.activate_main()
+        lease = end_lease(w, d(end_off))
+        w.db.commit()
+        key = f"contract_end:{lease.id}:{d(end_off).isoformat()}"
+        listed = [i for i in c.get(V + "/reminders").json()["items"] if i["type"] == "contract_end"]
+        r = c.post(V + "/reminders/task", json={"key": key})
+        if created:
+            assert [i["key"] for i in listed] == [key]
+            assert r.status_code == 201, r.text
+            assert r.json()["lease_id"] == lease.id and r.json()["due_date"] == d(end_off).isoformat()
+            again = c.post(V + "/reminders/task", json={"key": key})
+            assert again.status_code == 409 and again.json()["detail"]["code"] == "exists"  # Idempotenz: keine zweite Aufgabe
+        else:
+            assert listed == []
+            assert r.status_code == 404 and r.json()["detail"]["code"] == "not_found"
+            assert not any(t.get("lease_id") == lease.id for t in c.get(V + "/tasks").json()["items"])
+        w.db.close()
+    finally:
+        c.__exit__(None, None, None)
 
 
 # ---------------------------------------------------------------------------------------------------------------------------------

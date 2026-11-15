@@ -83,7 +83,7 @@ DEFINITIONS = {
     "active_tenants": "Verschiedene Personen/Firmen mit mindestens einem laufenden Untermietvertrag als Mieter oder Mitmieter. Personen ohne laufenden Vertrag, Bewohner und Bürgen zählen nicht.",
     "main_rent_obligations": "Soll der Hauptmieten (Kalt + Nebenkosten) für den laufenden Monat, tagesanteilig laut Vertragskonditionen (aus der zentralen Soll-Berechnung).",
     "sublease_receivables": "Soll der Untermieten (Kalt + Nebenkosten) für den laufenden Monat, tagesanteilig laut Vertragskonditionen.",
-    "open_receivables": "Summe aller offenen Forderungen gegen Untermieter zum Stichtag (Sollstellungen abzüglich der Zahlungen mit Buchungsdatum bis zum Stichtag), unabhängig von der Fälligkeit; später gebuchte Zahlungen mindern den Stand zum Stichtag nicht.",
+    "open_receivables": "Summe aller offenen Forderungen gegen Untermieter zum Stichtag (Sollstellungen abzüglich der Zahlungen mit Buchungsdatum bis zum Stichtag), unabhängig von der Fälligkeit; später gebuchte Zahlungen mindern den Stand zum Stichtag nicht. Einschränkung: später zurückgenommene Zuordnungen und heute stornierte Sollstellungen wirken auch auf historische Stichtage (ADR 0002, A6).",
     "overdue_payments": "Anzahl offener Forderungspositionen (Sollstellungen) zum Stichtag, deren Fälligkeit vor dem Stichtag liegt – nach Teilzahlungen mit Buchungsdatum bis zum Stichtag.",
     "monthly_utility_costs": "Nebenkosten-Soll der Hauptmieten (Vorauszahlung + Pauschale) für den laufenden Monat.",
     "open_tasks": "Aufgaben mit Status offen, in Bearbeitung oder wartet.",
