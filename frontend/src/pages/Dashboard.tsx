@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type BackupList, type DashboardData, type User } from "../lib/api";
 import { Link } from "react-router-dom";
+import { PHASE } from "../components/TenantPanel";
 import { Badge, Card, EmptyState, KpiCard, PageHeader } from "../components/ui";
 import { eur } from "../lib/hooks";
 import { Icons } from "../components/icons";
@@ -31,14 +32,14 @@ export default function Dashboard({ user }: { user: User }) {
       <div className="grid kpis">
         {data?.kpis.map((k) => {
           const I = Icons[ICONS[k.key] ?? "home"];
-          return <KpiCard key={k.key} icon={<I size={28} />} label={k.label} value={k.value} available={k.available} format={k.format} hint={`verfügbar ab Phase ${k.planned_phase}`} />;
+          return <KpiCard key={k.key} icon={<I size={28} />} label={k.label} value={k.value} available={k.available} format={k.format} definition={k.definition} hint={k.available ? k.hint : (k.hint ?? "derzeit nicht verfügbar")} />;
         })}
       </div>
       <div className="grid two-col">
         <Card>
           <div className="card-head"><h2>Mieter</h2></div>
           {tenants.length === 0 ? <EmptyState title="Noch keine Mieter erfasst">Mieter legen Sie unter „Stammdaten → Mieter“ an.</EmptyState> : (
-            <table><tbody>{tenants.map((t, i) => <tr key={i}><td><Link className="link" to={`/parteien/${t.party_id}`}>{t.name}</Link></td><td>{t.spaces?.join("; ") ?? "–"}</td><td>{t.lease_status && <Badge tone={t.lease_status === "active" ? "ok" : "warn"}>{t.lease_status === "active" ? "Aktiv" : t.lease_status}</Badge>}</td></tr>)}</tbody></table>)}
+            <table><tbody>{tenants.map((t, i) => <tr key={i}><td><Link className="link" to={`/parteien/${t.party_id}`}>{t.name}</Link></td><td>{t.spaces?.join("; ") ?? "–"}</td><td>{t.lease_status && <Badge tone={PHASE[t.lease_status]?.[1] ?? "warn"}>{PHASE[t.lease_status]?.[0] ?? t.lease_status}</Badge>}</td></tr>)}</tbody></table>)}
         </Card>
         <Card>
           <div className="card-head"><h2>Aufgaben &amp; Hinweise</h2></div>

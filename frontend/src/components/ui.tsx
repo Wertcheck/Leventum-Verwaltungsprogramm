@@ -14,14 +14,14 @@ export const EmptyState = ({ title, children }: { title: string; children?: Reac
 
 export const eurText = (v: string) => Number(v).toLocaleString("de-DE", { style: "currency", currency: "EUR" });
 
-export function KpiCard({ icon, label, value, available, hint, format }: { icon: ReactNode; label: string; value: number | string | null; available: boolean; hint?: string; format?: string }) {
+export function KpiCard({ icon, label, value, available, hint, format, definition }: { icon: ReactNode; label: string; value: number | string | null; available: boolean; hint?: string | null; format?: string; definition?: string }) {
   return (
-    <Card className="kpi">
+    <Card className="kpi" >
       <div className="ic">{icon}</div>
       <div>
-        <div className="label">{label}</div>
+        <div className="label" title={definition}>{label}{definition && <span className="kpi-info" aria-label={`Definition: ${definition}`} title={definition}> ⓘ</span>}</div>
         <div className={`value ${available ? "" : "na"} ${format === "eur" ? "money" : ""}`} data-testid={`kpi-${label}`}>{available && value !== null ? (format === "eur" ? eurText(String(value)) : value) : "–"}</div>
-        {!available && hint && <div className="hint">{hint}</div>}
+        {hint && <div className="hint">{hint}</div>}
       </div>
     </Card>
   );

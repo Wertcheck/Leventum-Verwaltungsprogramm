@@ -8,6 +8,8 @@ interface Rep {
   soll: Record<string, string>; ist: Record<string, string>; offen_zum_stichtag: Record<string, string>;
   vacancy: { economic_vacancy_cost: string; physical_vacancy_rate_by_count: string | null; note: string };
   contribution: { label: string; rent_margin_soll: string; utility_flow_soll: string; soll_basis: string; ist_basis: string; utility_settlement_upstream: { balance: string; statements_counted: number } | null; soll_basis_incl_upstream_settlement: string | null };
+  datenstand?: { today: string; data_as_of: string; period_extends_beyond_data_stand: boolean; note: string };
+  prognose_periodenende?: { label: string; as_of: string; receivables_open_if_no_further_payments: string; receivables_overdue_if_no_further_payments: string; payables_open_if_no_further_payments: string; invoices_open_if_no_further_payments: string } | null;
   warnings: { code: string; message: string }[]; assumptions: string[];
 }
 const monthEnd = (m: string) => { const [y, mo] = m.split("-").map(Number); return `${m}-${String(new Date(y, mo, 0).getDate()).padStart(2, "0")}`; };
@@ -41,6 +43,8 @@ export default function EconomicsPage() {
             <Row k="Eingänge von Untermietern" v={data.ist.in_from_subleases} /><Row k="Sonstige Eingänge (nicht zugeordnet)" v={data.ist.in_other_unallocated} /><Row k="Eingänge gesamt" v={data.ist.in_total} strong />
             <Row k="Hauptmiete bezahlt" v={data.ist.out_main_rent} /><Row k="Rechnungen bezahlt" v={data.ist.out_invoices} /><Row k="Sonstige Ausgänge (nicht zugeordnet)" v={data.ist.out_other_unallocated} /><Row k="Ausgänge gesamt" v={data.ist.out_total} strong /></dl></Card>
         </div>
+        {data.datenstand && <div className={`alert ${data.datenstand.period_extends_beyond_data_stand ? "warn" : "ok"}`} role="status" data-testid="datenstand">
+          <strong>Datenstand: {dateDe(data.datenstand.data_as_of)}.</strong> {data.datenstand.note}{data.datenstand.period_extends_beyond_data_stand && " Der gewählte Zeitraum reicht über den Datenstand hinaus – Soll ist Planwert, Ist und offene Posten gelten nur bis zum Datenstand."}</div>}
         <div style={{ height: 20 }} />
         <div className="grid two-col">
           <Card><div className="card-head"><h2>{data.contribution.label}</h2></div><dl className="kv">
@@ -49,10 +53,15 @@ export default function EconomicsPage() {
             {data.contribution.utility_settlement_upstream && <><Row k="NK-Abrechnung Vermieter (+Nachzahlung / −Guthaben)" v={data.contribution.utility_settlement_upstream.balance} /><Row k="Soll-Basis inkl. NK-Abrechnung" v={data.contribution.soll_basis_incl_upstream_settlement} strong /></>}</dl>
             <p className="muted">Soll- und Ist-Basis nicht addieren. Kein Gewinn, sondern vorläufig.</p></Card>
           <Card><div className="card-head"><h2>Offen &amp; Leerstand</h2></div><dl className="kv">
-            <Row k={`Offene Forderungen (Stand ${dateDe(data.offen_zum_stichtag.as_of)})`} v={data.offen_zum_stichtag.receivables} /><Row k="davon überfällig (Rückstand)" v={data.offen_zum_stichtag.receivables_overdue} />
+            <Row k={`Offene Forderungen (Datenstand ${dateDe(data.offen_zum_stichtag.as_of)})`} v={data.offen_zum_stichtag.receivables} /><Row k="davon überfällig (Rückstand)" v={data.offen_zum_stichtag.receivables_overdue} />
             <Row k="Offene Verbindlichkeiten" v={data.offen_zum_stichtag.payables} /><Row k="Offene Rechnungen" v={data.offen_zum_stichtag.invoices} />
             <Row k="Wirtschaftlicher Leerstand (Teil der Hauptmiete)" v={data.vacancy.economic_vacancy_cost} /><dt>Physischer Leerstand</dt><dd>{data.vacancy.physical_vacancy_rate_by_count ? `${data.vacancy.physical_vacancy_rate_by_count.replace(".", ",")} %` : "–"}</dd></dl></Card>
         </div>
+        {data.prognose_periodenende && <Card><div className="card-head"><h2>{data.prognose_periodenende.label}</h2></div><dl className="kv" data-testid="prognose">
+          <Row k={`Offene Forderungen zum ${dateDe(data.prognose_periodenende.as_of)} (falls keine weiteren Zahlungen eingehen)`} v={data.prognose_periodenende.receivables_open_if_no_further_payments} />
+          <Row k="davon überfällig" v={data.prognose_periodenende.receivables_overdue_if_no_further_payments} />
+          <Row k="Offene Verbindlichkeiten" v={data.prognose_periodenende.payables_open_if_no_further_payments} /><Row k="Offene Rechnungen" v={data.prognose_periodenende.invoices_open_if_no_further_payments} /></dl>
+          <p className="muted">Reine Prognose unter der Annahme, dass bis zum Periodenende keine weiteren Zahlungen gebucht werden. Keine Ist-Werte.</p></Card>}
         {data.warnings.map((w, i) => <div key={i} className="alert warn" style={{ marginTop: 12 }}>{w.message}</div>)}
         <details style={{ marginTop: 12 }}><summary>Annahmen &amp; Methode</summary><ul>{data.assumptions.map((a, i) => <li key={i}>{a}</li>)}</ul></details>
       </div>}

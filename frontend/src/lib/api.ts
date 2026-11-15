@@ -29,7 +29,7 @@ export async function upload<T = unknown>(path: string, form: FormData): Promise
 }
 
 export interface User { id: number; username: string; display_name: string; role: string }
-export interface Kpi { key: string; label: string; value: number | string | null; format?: string; available: boolean; planned_phase: string }
+export interface Kpi { key: string; label: string; value: number | string | null; format?: string; available: boolean; planned_phase: string; definition?: string; hint?: string | null }
 export interface Reminder { key: string; type: string; severity: "critical" | "warning" | "info"; title: string; detail: string; due_date: string | null; task_id: number | null }
 export interface DashTask { id: number; title: string; due_date: string | null; overdue: boolean; priority: string; status: string }
 export interface DashboardData { kpis: Kpi[]; warnings: Reminder[]; tasks: DashTask[] }

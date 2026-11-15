@@ -53,7 +53,7 @@ const PW = "ein-langes-passwort-123";
     const ruB2 = await RU({ property_id: pB.id, unit_id: b2.id });
     s.ke = await sub("wohnraum_befristet", "2026-01-01", [ruB2.id], "Keller", "900.00", "prepayment", "200.00", { end_date: "2026-12-31", is_fixed_term: true, fixed_term_reason: "Beispiel: Eigenbedarf des Eigentümers ab 2027", notice_period_months: 2 });
     await A("POST", `/leases/${s.ke.id}/terminate`, { terminated_on: "2026-10-20", effective_on: "2026-12-31" });
-    await A("POST", "/charges/generate", { from_month: "2026-01-01", through_month: "2026-11-01" });
+    await A("POST", "/charges/generate", { from_month: "2026-01-01", through_month: "2026-11-01", allow_backdated: true });
     const charges = (await A("GET", "/charges")).items.filter((c) => !c.voided_at);
     const byLease = (id) => charges.filter((c) => c.lease_id === id);
     for (const c of charges.sort((a, b) => a.due_date.localeCompare(b.due_date))) {
