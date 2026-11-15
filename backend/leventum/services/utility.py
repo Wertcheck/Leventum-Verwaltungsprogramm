@@ -135,6 +135,9 @@ def set_status(db: Session, actor_id: int | None, statement_id: int, status: str
         raise ServiceError("invalid_state", "Statuswechsel nur schrittweise vorwärts (draft → captured → reviewed).", 409)
     if status == "reviewed" and st.prepayments_amount is None:
         raise ServiceError("incomplete", "Vor der Prüfung müssen die Vorauszahlungen erfasst sein.", 409)
+    if status == "reviewed":
+        live = _allocate_live(db, st)  # Verteilung einfrieren: spätere Änderungen an Flächen/Gewichten verändern geprüfte Abrechnungen nicht
+        st.allocation_snapshot = _snapshot_dump(live, st)
     st.status = status
     audit.record(db, "utility_statement.status", actor_user_id=actor_id, entity_type="utility_statement", entity_id=st.id,
                  summary=f"Status: {status}")
@@ -187,9 +190,38 @@ def compute_statement(db: Session, statement_id: int) -> dict:
 
 
 # --- Verteilung auf Wohneinheiten ----------------------------------------------------------------------------
+def _snapshot_dump(res: dict, st: UtilityStatement) -> dict:
+    from datetime import datetime, timezone
+    areas = {str(u.unit_id): (str(db_area) if (db_area := getattr(u, "_area", None)) is not None else None) for u in st.units}
+    return {"frozen_at": datetime.now(timezone.utc).isoformat(), "basis_areas": areas, "unallocated": str(res["unallocated"]),
+            "per_unit": {str(k): str(v) for k, v in res["per_unit"].items()},
+            "lines": [{"line_id": l["line_id"], "cost_type": l["cost_type"], "amount": str(l["amount"]), "key": l["key"],
+                       "shares": None if l["shares"] is None else {str(k): str(v) for k, v in l["shares"].items()}, "problem": l.get("problem")} for l in res["lines"]],
+            "warnings": res["warnings"]}
+
+
+def _snapshot_load(st: UtilityStatement) -> dict:
+    sn = st.allocation_snapshot
+    return {"statement_id": st.id, "frozen": True, "frozen_at": sn["frozen_at"], "unallocated": Decimal(sn["unallocated"]),
+            "per_unit": {int(k): Decimal(v) for k, v in sn["per_unit"].items()},
+            "lines": [{"line_id": l["line_id"], "cost_type": l["cost_type"], "amount": Decimal(l["amount"]), "key": l["key"],
+                       "shares": None if l["shares"] is None else {int(k): Decimal(v) for k, v in l["shares"].items()}, **({"problem": l["problem"]} if l.get("problem") else {})} for l in sn["lines"]],
+            "warnings": sn["warnings"]}
+
+
 def allocate_statement(db: Session, statement_id: int) -> dict:
+    """Geprüfte Abrechnungen liefern die EINGEFRORENE Verteilung; sonst wird live aus den aktuellen Stammdaten gerechnet."""
     st = get_or_404(db, UtilityStatement, statement_id, "Abrechnung")
+    if st.allocation_snapshot:
+        return _snapshot_load(st)
+    return {**_allocate_live(db, st), "frozen": False}
+
+
+def _allocate_live(db: Session, st: UtilityStatement) -> dict:
+    statement_id = st.id
     units = {u.unit_id: db.get(Unit, u.unit_id) for u in st.units}
+    for u in st.units:  # Flächen für den Schnappschuss merken
+        u._area = units[u.unit_id].living_area
     per_unit = {uid: Decimal(0) for uid in units}
     lines_out, warnings, unallocated = [], [], Decimal(0)
     for ln in st.lines:

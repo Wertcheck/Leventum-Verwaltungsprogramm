@@ -83,6 +83,7 @@ class UnitIn(In):
 
 
 class UnitPatch(In):
+    unit_number: str | None = Field(None, min_length=1, max_length=40)
     floor: str | None = None
     living_area: Pos | None = None
     rooms_count: int | None = Field(None, ge=0)
@@ -101,6 +102,19 @@ class RoomIn(In):
 class BedIn(In):
     label: str = Field(min_length=1, max_length=80)
     notes: str | None = None
+
+
+class RoomPatch(In):
+    name: str | None = Field(None, min_length=1, max_length=80)
+    area: Pos | None = None
+    notes: str | None = None
+    is_active: bool | None = None
+
+
+class BedPatch(In):
+    label: str | None = Field(None, min_length=1, max_length=80)
+    notes: str | None = None
+    is_active: bool | None = None
 
 
 class RentableIn(In):

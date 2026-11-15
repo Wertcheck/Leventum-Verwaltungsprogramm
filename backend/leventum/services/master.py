@@ -52,6 +52,7 @@ def create_party(db: Session, actor_id: int | None, data: dict, roles: list[str]
 def update_party(db: Session, actor_id: int | None, party_id: int, data: dict, roles: list[str] | None = None) -> Party:
     p = get_or_404(db, Party, party_id, "Partei")
     changed = {k: v for k, v in data.items() if getattr(p, k) != v}
+    changes = audit.diff(p, changed)
     for k, v in changed.items():
         setattr(p, k, v)
     if "display_name" not in data and ({"first_name", "last_name", "company_name"} & changed.keys()):
@@ -63,7 +64,7 @@ def update_party(db: Session, actor_id: int | None, party_id: int, data: dict, r
         p.roles = [PartyRole(role=r) for r in dict.fromkeys(roles)]
         changed["roles"] = roles
     audit.record(db, "party.updated", actor_user_id=actor_id, entity_type="party", entity_id=p.id,
-                 summary=f"Partei geändert: {p.display_name}", details={"fields": sorted(changed)})
+                 summary=f"Partei geändert: {p.display_name}", details={"fields": sorted(changed), "changes": changes})
     db.flush()
     return p
 
@@ -94,10 +95,11 @@ def update_property(db: Session, actor_id: int | None, property_id: int, data: d
         _check(data["property_type"], domain.PROPERTY_TYPES, "property_type")
     if data.get("owner_party_id") is not None:
         get_or_404(db, Party, data["owner_party_id"], "Eigentümer")
+    changes = audit.diff(p, data)
     for k, v in data.items():
         setattr(p, k, v)
     audit.record(db, "property.updated", actor_user_id=actor_id, entity_type="property", entity_id=p.id,
-                 summary=f"Objekt geändert: {p.name}", details={"fields": sorted(data)})
+                 summary=f"Objekt geändert: {p.name}", details={"fields": sorted(data), "changes": changes})
     db.flush()
     return p
 
@@ -124,12 +126,60 @@ def update_unit(db: Session, actor_id: int | None, unit_id: int, data: dict) -> 
     u = get_or_404(db, Unit, unit_id, "Wohneinheit")
     if data.get("manual_status") is not None:
         _check(data["manual_status"], domain.UNIT_MANUAL_STATUS, "manual_status")
+    if data.get("is_active") is False and u.is_active:
+        assert_unused(db, ("P", u.property_id), ("U", u.id))
+    if "unit_number" in data and data["unit_number"] != u.unit_number and _dup(db, Unit, property_id=u.property_id, unit_number=data["unit_number"]):
+        raise ServiceError("duplicate", f"Wohneinheit {data['unit_number']!r} existiert in diesem Objekt bereits.", 409)
+    changes = audit.diff(u, data)
     for k, v in data.items():
         setattr(u, k, v)
     audit.record(db, "unit.updated", actor_user_id=actor_id, entity_type="unit", entity_id=u.id,
-                 summary=f"Wohneinheit geändert: {u.unit_number}", details={"fields": sorted(data)})
+                 summary=f"Wohneinheit geändert: {u.unit_number}", details={"fields": sorted(data), "changes": changes})
     db.flush()
     return u
+
+
+def assert_unused(db: Session, *node_chain) -> None:
+    """Ein Raum/Bett/Wohneinheit darf nicht deaktiviert werden, solange ein Entwurf oder laufender/zukünftiger Vertrag sie (oder etwas darunter) vermietet."""
+    from leventum.models import Lease, LeaseItem
+    c = tuple(node_chain)
+    rows = db.scalars(select(Lease).where(Lease.status.in_(("draft", "active", "terminated"))))
+    for lease in rows:
+        for it in lease.items:
+            ic = chain(it.rentable_unit)
+            if len(ic) >= len(c) and ic[:len(c)] == c:
+                raise ServiceError("in_use", f"Kann nicht deaktiviert werden: Vertrag {lease.id} ({lease.status}) vermietet diese Einheit oder Teile davon.", 409, {"lease_id": lease.id})
+
+
+def update_room(db: Session, actor_id: int | None, room_id: int, data: dict) -> Room:
+    r = get_or_404(db, Room, room_id, "Zimmer")
+    if "name" in data and (not data["name"].strip() or (data["name"] != r.name and _dup(db, Room, unit_id=r.unit_id, name=data["name"]))):
+        raise ServiceError("duplicate", "Zimmername leer oder in dieser Wohneinheit bereits vergeben.", 409)
+    if data.get("is_active") is False and r.is_active:
+        u = db.get(Unit, r.unit_id)
+        assert_unused(db, ("P", u.property_id), ("U", u.id), ("R", r.id))
+    changes = audit.diff(r, data)
+    for k, v in data.items():
+        setattr(r, k, v)
+    audit.record(db, "room.updated", actor_user_id=actor_id, entity_type="room", entity_id=r.id, summary=f"Zimmer geändert: {r.name}", details={"fields": sorted(data), "changes": changes})
+    db.flush()
+    return r
+
+
+def update_bed(db: Session, actor_id: int | None, bed_id: int, data: dict) -> Bed:
+    b = get_or_404(db, Bed, bed_id, "Bett")
+    if "label" in data and (not data["label"].strip() or (data["label"] != b.label and _dup(db, Bed, room_id=b.room_id, label=data["label"]))):
+        raise ServiceError("duplicate", "Bettbezeichnung leer oder in diesem Zimmer bereits vergeben.", 409)
+    if data.get("is_active") is False and b.is_active:
+        r = db.get(Room, b.room_id)
+        u = db.get(Unit, r.unit_id)
+        assert_unused(db, ("P", u.property_id), ("U", u.id), ("R", r.id), ("B", b.id))
+    changes = audit.diff(b, data)
+    for k, v in data.items():
+        setattr(b, k, v)
+    audit.record(db, "bed.updated", actor_user_id=actor_id, entity_type="bed", entity_id=b.id, summary=f"Bett geändert: {b.label}", details={"fields": sorted(data), "changes": changes})
+    db.flush()
+    return b
 
 
 def create_room(db: Session, actor_id: int | None, unit_id: int, data: dict) -> Room:

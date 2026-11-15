@@ -113,14 +113,29 @@ def update_lease(db: Session, actor_id: int | None, lease_id: int, data: dict) -
         raise ServiceError("invalid", f"Felder nicht direkt änderbar: {sorted(forbidden)}")
     if lease.status in ("ended", "cancelled"):
         raise ServiceError("locked", "Beendete oder stornierte Verträge sind nicht änderbar.", 409)
+    changes = audit.diff(lease, data)
     for k, v in data.items():
         setattr(lease, k, v)
     if lease.end_date is not None and lease.end_date < lease.start_date:
         raise ServiceError("invalid", "Vertragsende liegt vor dem Vertragsbeginn.")
+    impact = date_change_impact(db, lease) if {"start_date", "end_date"} & data.keys() else []
     audit.record(db, "lease.updated", actor_user_id=actor_id, entity_type="lease", entity_id=lease.id,
-                 summary="Vertrag geändert", details={"fields": sorted(data)})
+                 summary="Vertrag geändert", details={"fields": sorted(data), "changes": changes, "charges_outside_period": impact})
     db.flush()
+    lease._impact = impact  # für die API-Antwort (nicht persistiert)
     return lease
+
+
+def date_change_impact(db: Session, lease: Lease) -> list[int]:
+    """Bereits erzeugte, nicht stornierte Sollstellungen, die nach einer Änderung von Beginn/Ende vollständig außerhalb der Laufzeit liegen.
+    Sie werden NIE automatisch verändert; der Anwender muss sie bewusst stornieren."""
+    from leventum.models import Charge
+    end = effective_end(lease)
+    out = []
+    for c in db.scalars(select(Charge).where(Charge.lease_id == lease.id, Charge.voided_at.is_(None))):
+        if c.period_end < lease.start_date or (end is not None and c.period_start > end):
+            out.append(c.id)
+    return out
 
 
 # --- Konditionen (versioniert) ---------------------------------------------------------------------

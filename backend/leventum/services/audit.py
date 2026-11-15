@@ -12,3 +12,21 @@ def record(db: Session, action: str, *, actor_user_id: int | None = None, entity
     db.add(ev)
     db.flush()
     return ev
+
+
+SENSITIVE = {"iban", "birth_date", "notes", "email", "phone"}
+
+
+def diff(obj, data: dict) -> dict:
+    """Vorher/Nachher der tatsächlich geänderten Felder. Sensible personenbezogene Felder werden nur als „geändert“ vermerkt (kein Klartext im Protokoll)."""
+    out = {}
+    for k, new in data.items():
+        old = getattr(obj, k, None)
+        if old == new:
+            continue
+        if k in SENSITIVE:
+            out[k] = ["(geändert)", "(geändert)"]
+        else:
+            fmt = lambda v: None if v is None else str(v)[:200]
+            out[k] = [fmt(old), fmt(new)]
+    return out

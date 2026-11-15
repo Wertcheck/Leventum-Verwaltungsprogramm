@@ -214,3 +214,18 @@ def arrears(db: Session, lease_id: int, today: date | None = None) -> dict:
             total += o
             n += 1
     return {"status": "arrears" if n else "current", "amount": q(total), "count": n}
+
+
+def arrears_bulk(db: Session, lease_ids: list[int], today: date | None = None) -> dict[int, dict]:
+    """Wie `arrears`, aber für viele Verträge mit zwei Abfragen (statt einer je Vertrag)."""
+    today = today or date.today()
+    out = {i: {"status": "current", "amount": Decimal("0.00"), "count": 0} for i in lease_ids}
+    if not lease_ids:
+        return out
+    alloc = dict(db.execute(select(PaymentAllocation.charge_id, func.sum(PaymentAllocation.amount)).where(PaymentAllocation.charge_id.is_not(None)).group_by(PaymentAllocation.charge_id)).all())
+    for c in db.scalars(select(Charge).where(Charge.lease_id.in_(lease_ids), Charge.direction == "receivable", Charge.voided_at.is_(None), Charge.due_date < today)):
+        o = q(c.amount - Decimal(alloc.get(c.id, 0)))
+        if o > 0:
+            r = out[c.lease_id]
+            r["amount"], r["count"], r["status"] = q(r["amount"] + o), r["count"] + 1, "arrears"
+    return out

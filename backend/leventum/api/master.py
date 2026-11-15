@@ -12,7 +12,7 @@ from leventum import domain
 from leventum.api import schemas as S
 from leventum.api.deps import current_user, get_db, require
 from leventum.models import (AuditEvent, Bed, CostType, Lease, LeaseNote, LeaseType, Party, PartyRole, Property, RentableUnit,
-                             Room, Unit, UtilityStatement)
+                             Room, Unit, UtilityStatement, UtilityStatementUnit)
 from leventum.models import AppUser
 from leventum.services import charges as C, leases as L, master as M, utility as U
 from leventum.services.errors import NotFound
@@ -170,9 +170,31 @@ def units_list(property_id: int | None = None, db: Session = Depends(get_db)):
 
 @router.patch("/units/{unit_id}", dependencies=[W])
 def units_patch(unit_id: int, body: S.UnitPatch, db: Session = Depends(get_db), user: AppUser = Depends(current_user)):
-    u = M.update_unit(db, user.id, unit_id, _dump(body, exclude_unset=True))
+    data = _dump(body, exclude_unset=True)
+    area_changed = "living_area" in data and M.get_or_404(db, Unit, unit_id, "Wohneinheit").living_area != data["living_area"]
+    u = M.update_unit(db, user.id, unit_id, data)
+    warnings = []
+    if area_changed:
+        n = db.scalar(select(func.count()).select_from(UtilityStatement).join(UtilityStatementUnit, UtilityStatementUnit.statement_id == UtilityStatement.id)
+                      .where(UtilityStatementUnit.unit_id == unit_id, UtilityStatement.status == "reviewed"))
+        warnings.append({"code": "area_changed", "message": "Die Fläche beeinflusst künftige Verteilungen (Nebenkosten, Hauptmiete, Auswertungen)."
+                         + (f" {n} bereits geprüfte Abrechnung(en) bleiben unverändert (eingefrorene Verteilung)." if n else "")})
     db.commit()
-    return ser(u)
+    return {**ser(u), "warnings": warnings}
+
+
+@router.patch("/rooms/{room_id}", dependencies=[W])
+def rooms_patch(room_id: int, body: S.RoomPatch, db: Session = Depends(get_db), user: AppUser = Depends(current_user)):
+    r = M.update_room(db, user.id, room_id, _dump(body, exclude_unset=True))
+    db.commit()
+    return ser(r)
+
+
+@router.patch("/beds/{bed_id}", dependencies=[W])
+def beds_patch(bed_id: int, body: S.BedPatch, db: Session = Depends(get_db), user: AppUser = Depends(current_user)):
+    b = M.update_bed(db, user.id, bed_id, _dump(body, exclude_unset=True))
+    db.commit()
+    return ser(b)
 
 
 @router.post("/units/{unit_id}/rooms", dependencies=[W], status_code=201)
@@ -267,8 +289,12 @@ def leases_get(lease_id: int, db: Session = Depends(get_db)):
 @router.patch("/leases/{lease_id}", dependencies=[W])
 def leases_patch(lease_id: int, body: S.LeasePatch, db: Session = Depends(get_db), user: AppUser = Depends(current_user)):
     lease = L.update_lease(db, user.id, lease_id, _dump(body, exclude_unset=True))
+    impact = getattr(lease, "_impact", [])
     db.commit()
-    return lease_detail(db, lease)
+    out = lease_detail(db, lease)
+    if impact:
+        out["impact"] = {"charges_outside_period": impact, "message": f"{len(impact)} bereits erzeugte Sollstellung(en) liegen außerhalb der neuen Laufzeit. Sie wurden NICHT verändert und müssen bei Bedarf einzeln storniert werden."}
+    return out
 
 
 @router.get("/leases/{lease_id}/validation", dependencies=[R])
@@ -331,36 +357,58 @@ def leases_cancel(lease_id: int, body: S.CancelIn, db: Session = Depends(get_db)
 
 # --- Mieterübersicht ---------------------------------------------------------------------------------------------------
 @router.get("/tenants", dependencies=[R])
-def tenants(status: str | None = None, property_id: int | None = None, q: str | None = None, db: Session = Depends(get_db)):
-    """Eine Zeile je Mieter und Untermietvertrag. Zahlungsstatus: arrears = überfällige, offene Forderungen (nach Teilzahlungen)."""
+def tenants(status: str | None = None, property_id: int | None = None, q: str | None = None, limit: int = Query(200, ge=1, le=1000), offset: int = Query(0, ge=0),
+            db: Session = Depends(get_db)):
+    """Eine Zeile je Mieter und Untermietvertrag (gebündelte Abfragen, paginiert). Phase = zeitbezogener Vertragszustand (upcoming|active|notice|ended|draft);
+    Zahlungsstatus: arrears = überfällige, offene Forderungen nach Teilzahlungen."""
+    from sqlalchemy.orm import selectinload
     today = date.today()
     stmt = select(Party).join(PartyRole).where(PartyRole.role == "tenant").order_by(Party.display_name)
     if q:
         stmt = stmt.where(func.lower(Party.display_name).like(f"%{q.lower()}%"))
-    rows = []
-    for p in db.scalars(stmt):
-        leases = db.scalars(select(Lease).join(L.LeaseParty).where(L.LeaseParty.party_id == p.id, L.LeaseParty.role.in_(("lessee", "co_lessee")),
-                                                                    Lease.kind == "sub", Lease.status != "cancelled")).all()
-        last = db.scalar(select(func.max(AuditEvent.occurred_at)).where(AuditEvent.entity_type == "party", AuditEvent.entity_id == str(p.id)))
+    parties = list(db.scalars(stmt))
+    pids = [p.id for p in parties]
+    by_party: dict[int, list[Lease]] = {i: [] for i in pids}
+    if pids:
+        rows = db.execute(select(L.LeaseParty.party_id, Lease).join(Lease, Lease.id == L.LeaseParty.lease_id).where(
+            L.LeaseParty.party_id.in_(pids), L.LeaseParty.role.in_(("lessee", "co_lessee")), Lease.kind == "sub", Lease.status != "cancelled")
+            .options(selectinload(Lease.items).joinedload(L.LeaseItem.rentable_unit), selectinload(Lease.terms), selectinload(Lease.utility_agreements))).all()
+        for pid, lease in rows:
+            by_party[pid].append(lease)
+    arrears = C.arrears_bulk(db, [l.id for ls in by_party.values() for l in ls], today)
+    last = dict(db.execute(select(AuditEvent.entity_id, func.max(AuditEvent.occurred_at)).where(AuditEvent.entity_type == "party").group_by(AuditEvent.entity_id)).all()) if pids else {}
+    out = []
+    for p in parties:
+        last_act = js(last.get(str(p.id)))
+        leases = by_party[p.id]
         if not leases:
             if status is None and property_id is None:
-                rows.append({"party_id": p.id, "name": p.display_name, "lease_id": None, "last_activity": js(last)})
+                out.append({"party_id": p.id, "name": p.display_name, "lease_id": None, "lease_status": "no_lease", "last_activity": last_act})
             continue
         for lease in leases:
-            arrears = C.arrears(db, lease.id, today)
-            if status == "arrears" and arrears["status"] != "arrears":
-                continue
-            props = {i.rentable_unit.property_id for i in lease.items}
-            if property_id and property_id not in props:
-                continue
+            ar = arrears[lease.id]
             ph = L.phase(lease, today)
+            if status == "arrears" and ar["status"] != "arrears":
+                continue
             if status and status != "arrears" and ph != {"terminated": "notice"}.get(status, status):
                 continue
-            rows.append({"party_id": p.id, "name": p.display_name, "lease_id": lease.id, "lease_status": ph, "lease_raw_status": lease.status,
-                         "spaces": [M.space_label(db, i.rentable_unit) for i in lease.items], "start_date": js(lease.start_date),
-                         "end_date": js(L.effective_end(lease)), "monthly_total": js(L.monthly_total(lease, max(today, lease.start_date))),
-                         "payment_status": arrears["status"], "overdue_amount": js(arrears["amount"]), "last_activity": js(last)})
-    return {"items": rows}
+            if property_id and property_id not in {i.rentable_unit.property_id for i in lease.items}:
+                continue
+            out.append({"party_id": p.id, "name": p.display_name, "lease_id": lease.id, "lease_status": ph, "lease_raw_status": lease.status,
+                        "spaces": [M.space_label(db, i.rentable_unit) for i in lease.items], "start_date": js(lease.start_date), "end_date": js(L.effective_end(lease)),
+                        "monthly_total": js(L.monthly_total(lease, max(today, lease.start_date))), "payment_status": ar["status"], "overdue_amount": js(ar["amount"]), "last_activity": last_act})
+    return {"items": out[offset:offset + limit], "total": len(out), "limit": limit, "offset": offset}
+
+
+@router.get("/tenants/{party_id}/overview", dependencies=[R])
+def tenant_overview(party_id: int, db: Session = Depends(get_db)):
+    from leventum.services import tenant_overview as TO
+    o = TO.overview(db, party_id)
+    doc = lambda d: {"id": d.id, "original_name": d.original_name, "doc_type": d.doc_type, "size": d.size, "uploaded_at": d.uploaded_at}
+    return js({"party": party_out(o["party"]), "leases": o["leases"], "finance": o["finance"], "documents": [doc(d) for d in o["documents"]],
+               "tasks": [{"id": t.id, "title": t.title, "status": t.status, "priority": t.priority, "due_date": t.due_date, "lease_id": t.lease_id} for t in o["tasks"]],
+               "repairs": [{"id": r.id, "title": r.title, "status": r.status, "priority": r.priority, "reported_on": r.reported_on} for r in o["repairs"]],
+               "activity": [{"at": a["at"], "summary": a["summary"], "actor": a["actor"], "source": a["source"]} for a in o["activity"]]})
 
 
 # --- Nebenkosten (Ebene A + Vergleich) ---------------------------------------------------------------------------------------
