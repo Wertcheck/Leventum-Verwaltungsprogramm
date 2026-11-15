@@ -18,3 +18,6 @@ export function useFetch<T>(path: string | null) {
 // Nur zur Anzeige. Berechnet wird ausschließlich im Backend.
 export const eur = (v: string | null | undefined) => (v == null ? "–" : Number(v).toLocaleString("de-DE", { style: "currency", currency: "EUR" }));
 export const dateDe = (v: string | null | undefined) => (v ? new Date(v).toLocaleDateString("de-DE") : "–");
+export const dateDeFull = dateDe;
+/** 'WE' + '03' → 'WE 03'; enthält die Bezeichnung das Präfix bereits ('WE 03'), bleibt sie unverändert. */
+export const pref = (prefix: string, value: string) => (value.trim().toLowerCase().startsWith(prefix.toLowerCase()) ? value : `${prefix} ${value}`);

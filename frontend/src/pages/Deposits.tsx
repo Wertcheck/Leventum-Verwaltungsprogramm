@@ -22,7 +22,7 @@ export default function DepositsPage() {
       {(data?.items.filter((d) => d.lease_kind === kind) ?? []).length === 0 ? <EmptyState title="Keine Kautionen" /> : (
         <table><thead><tr><th>Vertrag</th><th>Vereinbart</th><th>Gezahlt</th><th>Offen</th><th>Gehalten</th><th>Status</th><th /></tr></thead>
           <tbody>{data?.items.filter((d) => d.lease_kind === kind).map((d) => <tr key={d.id}>
-            <td><Link className="link" to={`/vertraege/${d.lease_id}`}>#{d.lease_id}</Link> <span className="muted">{d.parties.filter((p) => p.role !== "lessor").map((p) => p.name).join(", ")}</span></td>
+            <td><Link className="link" to={`/vertraege/${d.lease_id}`}>#{d.lease_id}</Link> <span className="muted">{d.parties.filter((p) => p.role === (kind === "main" ? "lessor" : "lessee")).map((p) => p.name).join(", ")}</span></td>
             <td>{eur(d.agreed_amount)}</td><td>{eur(d.paid)}</td><td>{eur(d.open)} {d.overdue && <Badge tone="err">überfällig</Badge>}</td><td>{eur(d.held)}</td><td>{STATUS[d.status]}</td>
             <td><button className="btn small" onClick={() => { setTx(d); setF({ kind: "paid" }); }}>Buchung</button></td></tr>)}</tbody></table>)}
     </Card>);

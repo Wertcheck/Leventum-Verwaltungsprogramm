@@ -14,7 +14,7 @@ from leventum.api.deps import current_user, get_db, require
 from leventum.models import (AuditEvent, Bed, CostType, Lease, LeaseNote, LeaseType, Party, PartyRole, Property, RentableUnit,
                              Room, Unit, UtilityStatement)
 from leventum.models import AppUser
-from leventum.services import leases as L, master as M, utility as U
+from leventum.services import charges as C, leases as L, master as M, utility as U
 from leventum.services.errors import NotFound
 
 
@@ -325,7 +325,7 @@ def leases_cancel(lease_id: int, body: S.CancelIn, db: Session = Depends(get_db)
 # --- Mieterübersicht ---------------------------------------------------------------------------------------------------
 @router.get("/tenants", dependencies=[R])
 def tenants(status: str | None = None, property_id: int | None = None, q: str | None = None, db: Session = Depends(get_db)):
-    """Eine Zeile je Mieter und Untermietvertrag. Zahlungsstatus folgt mit Phase D (derzeit null)."""
+    """Eine Zeile je Mieter und Untermietvertrag. Zahlungsstatus: arrears = überfällige, offene Forderungen (nach Teilzahlungen)."""
     today = date.today()
     stmt = select(Party).join(PartyRole).where(PartyRole.role == "tenant").order_by(Party.display_name)
     if q:
@@ -340,16 +340,19 @@ def tenants(status: str | None = None, property_id: int | None = None, q: str | 
                 rows.append({"party_id": p.id, "name": p.display_name, "lease_id": None, "last_activity": js(last)})
             continue
         for lease in leases:
+            arrears = C.arrears(db, lease.id, today)
+            if status == "arrears" and arrears["status"] != "arrears":
+                continue
             props = {i.rentable_unit.property_id for i in lease.items}
             if property_id and property_id not in props:
                 continue
             ui = {"active": ("active",), "terminated": ("terminated",), "ended": ("ended",), "draft": ("draft",)}.get(status or "")
-            if status and lease.status not in (ui or ()):
+            if status and status != "arrears" and lease.status not in (ui or ()):
                 continue
             rows.append({"party_id": p.id, "name": p.display_name, "lease_id": lease.id, "lease_status": lease.status,
                          "spaces": [M.space_label(db, i.rentable_unit) for i in lease.items], "start_date": js(lease.start_date),
                          "end_date": js(L.effective_end(lease)), "monthly_total": js(L.monthly_total(lease, max(today, lease.start_date))),
-                         "payment_status": None, "last_activity": js(last)})
+                         "payment_status": arrears["status"], "overdue_amount": js(arrears["amount"]), "last_activity": js(last)})
     return {"items": rows}
 
 

@@ -13,7 +13,9 @@ from leventum import domain
 from leventum.models import Charge, Deposit, Lease, Repair, Task, UtilityStatement
 from leventum.services import deposits as dep, documents as docs
 from leventum.services.charges import open_amount
+from leventum.services.dunning import eur
 from leventum.services.leases import _span, effective_end
+from leventum.services.master import lease_title
 from leventum.services.utility import q
 
 CONTRACT_END_DAYS = 90
@@ -37,7 +39,7 @@ def compute(db: Session, today: date | None = None) -> list[dict]:
     out: list[dict] = []
     leases = list(db.scalars(select(Lease).where(Lease.status.in_(domain.RUNNING_STATUS))))
     for l in leases:
-        label = f"{'Hauptmietvertrag' if l.kind == 'main' else 'Untermietvertrag'} #{l.id}"
+        label = f"{'Hauptmietvertrag' if l.kind == 'main' else 'Untermietvertrag'} {lease_title(db, l)}"
         end = effective_end(l)
         if end is not None and today <= end <= today + timedelta(days=CONTRACT_END_DAYS):
             out.append(_r(f"contract_end:{l.id}:{end}", "contract_end", "warning" if (end - today).days <= 30 else "info", f"{label} endet am {end:%d.%m.%Y}",
@@ -61,13 +63,13 @@ def compute(db: Session, today: date | None = None) -> list[dict]:
             per.setdefault(c.lease_id, []).append((c.due_date, o))
     for lid, rows in per.items():
         total, first = q(sum((o for _, o in rows), Decimal(0))), min(d for d, _ in rows)
-        out.append(_r(f"overdue:{lid}:{first}", "overdue_payment", "critical", f"Überfällige Zahlung – Vertrag #{lid}: {total} € offen",
+        out.append(_r(f"overdue:{lid}:{first}", "overdue_payment", "critical", f"Überfällige Zahlung – {lease_title(db, db.get(Lease, lid))}: {eur(total)} offen",
                       f"{len(rows)} Sollstellung(en), älteste fällig am {first:%d.%m.%Y}. Mahnwesen prüfen.", first, "lease", lid, amount=total))
     for d in db.scalars(select(Deposit)):
         lease = db.get(Lease, d.lease_id)
         s = dep.summary(d, lease, today)
         if s["overdue"]:
-            out.append(_r(f"deposit:{d.id}", "deposit_overdue", "warning", f"Kaution überfällig – Vertrag #{d.lease_id}: {s['open']} € offen", f"Fällig seit {d.due_date:%d.%m.%Y}.", d.due_date, "deposit", d.id))
+            out.append(_r(f"deposit:{d.id}", "deposit_overdue", "warning", f"Kaution überfällig – {lease_title(db, lease)}: {eur(s['open'])} offen", f"Fällig seit {d.due_date:%d.%m.%Y}.", d.due_date, "deposit", d.id))
     for r in db.scalars(select(Repair).where(Repair.status.in_(domain.REPAIR_OPEN))):
         if r.scheduled_for and r.scheduled_for < today:
             out.append(_r(f"repair_late:{r.id}:{r.scheduled_for}", "repair_overdue", "critical", f"Reparatur #{r.id} „{r.title}“: Termin verstrichen ({r.scheduled_for:%d.%m.%Y})", "Status noch offen.", r.scheduled_for, "repair", r.id))
@@ -86,7 +88,7 @@ def compute(db: Session, today: date | None = None) -> list[dict]:
             continue
         has = db.scalar(select(UtilityStatement.id).where(UtilityStatement.main_lease_id == l.id, UtilityStatement.period_end >= ys, UtilityStatement.period_start <= ye))
         if has is None:
-            out.append(_r(f"utility_statement:{l.id}:{y}", "utility_statement_due", "info", f"Hauptmietvertrag #{l.id}: keine Nebenkostenabrechnung für {y} erfasst",
+            out.append(_r(f"utility_statement:{l.id}:{y}", "utility_statement_due", "info", f"Hauptmietvertrag {lease_title(db, l)}: keine Nebenkostenabrechnung für {y} erfasst",
                           "Eingehende Abrechnung des Vermieters erfassen oder anfordern. Fristen sind rechtlich zu prüfen.", None, "lease", l.id))
     existing = {t.dedupe_key: t for t in db.scalars(select(Task).where(Task.dedupe_key.is_not(None)))}
     for r in out:

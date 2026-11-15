@@ -30,8 +30,20 @@ def _dump(m, **kw):
 
 
 # --- Aufgaben ---------------------------------------------------------------------------------------------------------------------
-def task_out(t: Task) -> dict:
-    return {**ser(t), "overdue": T.is_overdue(t)}
+def task_out(t: Task, db: Session | None = None) -> dict:
+    o = {**ser(t), "overdue": T.is_overdue(t)}
+    if db is not None:  # sprechende Bezüge statt nur IDs
+        from leventum.models import Party, Property
+        from leventum.services.master import lease_title
+        if t.lease_id:
+            o["lease_label"] = lease_title(db, db.get(Lease, t.lease_id))
+        if t.party_id:
+            o["party_label"] = db.get(Party, t.party_id).display_name
+        if t.property_id:
+            o["property_label"] = db.get(Property, t.property_id).name
+        if t.repair_id:
+            o["repair_label"] = db.get(Repair, t.repair_id).title
+    return o
 
 
 @router.get("/tasks", dependencies=[TR])
@@ -40,7 +52,7 @@ def tasks_list(status: str | None = None, priority: str | None = None, assignee_
                invoice_id: int | None = None, repair_id: int | None = None, db: Session = Depends(get_db)):
     rows = T.query(db, status=status, priority=priority, assignee_user_id=assignee_user_id, overdue=overdue, open_only=open_only, q=q, party_id=party_id,
                    property_id=property_id, unit_id=unit_id, lease_id=lease_id, invoice_id=invoice_id, repair_id=repair_id)
-    return {"items": [task_out(t) for t in rows]}
+    return {"items": [task_out(t, db) for t in rows]}
 
 
 @router.post("/tasks", dependencies=[TW], status_code=201)
@@ -105,7 +117,7 @@ def repair_out(db: Session, r: Repair, full: bool = False) -> dict:
     if full:
         v = R.view(db, r)
         o["events"] = [ser(e) for e in v["events"]]
-        o["tasks"] = [task_out(t) for t in v["tasks"]]
+        o["tasks"] = [task_out(t, db) for t in v["tasks"]]
         o["documents"] = [doc_out(d) for d in DOC.for_entity(db, "repair", r.id)]
     return o
 

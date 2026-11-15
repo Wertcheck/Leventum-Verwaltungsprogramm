@@ -141,3 +141,15 @@ def create_manual_charge(db: Session, actor_id: int | None, *, lease_id: int, am
     db.flush()
     audit.record(db, "charge.created", actor_user_id=actor_id, entity_type="charge", entity_id=c.id, summary="Manuelle Sollstellung", details={"amount": str(amount)})
     return c
+
+
+def arrears(db: Session, lease_id: int, today: date | None = None) -> dict:
+    """Zahlungsstatus eines Untermietvertrags: überfällige Forderungen, die nach Teilzahlungen noch offen sind."""
+    today = today or date.today()
+    total, n = Decimal("0.00"), 0
+    for c in db.scalars(select(Charge).where(Charge.lease_id == lease_id, Charge.direction == "receivable", Charge.voided_at.is_(None), Charge.due_date < today)):
+        o = open_amount(db, c)
+        if o > 0:
+            total += o
+            n += 1
+    return {"status": "arrears" if n else "current", "amount": q(total), "count": n}

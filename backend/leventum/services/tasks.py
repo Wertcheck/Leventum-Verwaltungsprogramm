@@ -62,7 +62,7 @@ def set_status(db: Session, actor_id: int | None, task_id: int, status: str, not
     old = t.status
     t.status = status
     t.completed_at = datetime.now(timezone.utc) if status in ("done", "cancelled") else None
-    audit.record(db, "task.status", actor_user_id=actor_id, entity_type="task", entity_id=t.id, summary=f"Aufgabenstatus: {old} → {status}",
+    audit.record(db, "task.status", actor_user_id=actor_id, entity_type="task", entity_id=t.id, summary=f"Aufgabenstatus: {domain.TASK_LABEL[old]} → {domain.TASK_LABEL[status]}",
                  details={"from": old, "to": status, "note": note})
     db.flush()
     return t

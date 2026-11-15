@@ -180,7 +180,7 @@ def suggest(db: Session, t: BankTransaction) -> list[dict]:
                 score += 20
                 reasons.append("Betrag entspricht dem offenen Rechnungsbetrag")
             if score >= MIN_SCORE and (inv.invoice_number and _n(inv.invoice_number) in ref or sup and _party_hit(sup, t)):
-                out.append({"kind": "invoice", "invoice_id": inv.id, "score": score, "reasons": reasons,
+                out.append({"kind": "invoice", "invoice_id": inv.id, "invoice_label": inv.invoice_number or f"#{inv.id}", "score": score, "reasons": reasons,
                             "allocations": [{"invoice_id": inv.id, "amount": min(o, amount)}], "unallocated_remainder": q(amount - min(o, amount))})
     if "kaution" in ref:
         for d in db.scalars(select(Deposit)):

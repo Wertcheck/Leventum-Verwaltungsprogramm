@@ -20,7 +20,7 @@ export function KpiCard({ icon, label, value, available, hint, format }: { icon:
       <div className="ic">{icon}</div>
       <div>
         <div className="label">{label}</div>
-        <div className={`value ${available ? "" : "na"}`} data-testid={`kpi-${label}`}>{available && value !== null ? (format === "eur" ? eurText(String(value)) : value) : "–"}</div>
+        <div className={`value ${available ? "" : "na"} ${format === "eur" ? "money" : ""}`} data-testid={`kpi-${label}`}>{available && value !== null ? (format === "eur" ? eurText(String(value)) : value) : "–"}</div>
         {!available && hint && <div className="hint">{hint}</div>}
       </div>
     </Card>

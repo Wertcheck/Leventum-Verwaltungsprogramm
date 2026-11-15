@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { eur, useFetch } from "../lib/hooks";
+import { dateDe, eur, useFetch } from "../lib/hooks";
 import { Card, PageHeader } from "../components/ui";
 import { Field, Select, Text } from "../components/Form";
 
@@ -17,15 +17,14 @@ export default function VacancyPage() {
   return (
     <>
       <PageHeader title="Leerstand" subtitle="Zwei getrennte Kennzahlen – Berechnung je Bett, Zimmer bzw. Wohneinheit (kleinste Einheit), ohne Doppelzählung." />
-      <Card><div className="form-grid">
-        <Field label="Objekt"><Select value={prop} onChange={setProp} empty="Alle Objekte" options={(props.data?.items ?? []).map((p) => ({ value: p.id, label: p.name }))} /></Field><div />
-        <Field label="Von (Monat)"><Text type="month" value={from} onChange={setFrom} /></Field><Field label="Bis (Monat)"><Text type="month" value={to} onChange={setTo} /></Field></div></Card>
+      <Card><div className="filter-row">
+        <Field label="Objekt"><Select value={prop} onChange={setProp} empty="Alle Objekte" options={(props.data?.items ?? []).map((p) => ({ value: p.id, label: p.name }))} /></Field>        <Field label="Von (Monat)"><Text type="month" value={from} onChange={setFrom} /></Field><Field label="Bis (Monat)"><Text type="month" value={to} onChange={setTo} /></Field></div></Card>
       {error && <div className="alert err">{error}</div>}
       {data && <>
         <div className="grid two-col" style={{ marginTop: 20 }}>
           <Card><div className="card-head"><h2>A · Physischer Leerstand</h2></div>
             <p style={{ fontSize: 32, fontWeight: 700 }} data-testid="phys">{pct(data.physical.vacancy_rate_by_count_percent)}</p><p className="muted">{data.physical.definition}</p>
-            <p>Stichtag {data.snapshot.as_of}: {data.snapshot.leaves_vacant} von {data.snapshot.leaves_total} Einheiten unbelegt.</p></Card>
+            <p>Stichtag {dateDe(data.snapshot.as_of)}: {data.snapshot.leaves_vacant} von {data.snapshot.leaves_total} Einheiten unbelegt.</p></Card>
           <Card><div className="card-head"><h2>B · Wirtschaftlicher Leerstand</h2></div>
             <p style={{ fontSize: 32, fontWeight: 700 }} data-testid="econ">{eur(data.economic.cost)}</p><p className="muted">{data.economic.definition}</p>
             <p>{data.economic.days_vacant_with_main_obligation} Leerstandstage mit Mietverpflichtung.</p></Card>

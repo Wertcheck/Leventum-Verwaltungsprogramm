@@ -65,3 +65,5 @@ COMM_DIRECTIONS = ("in", "out")
 HANDOVER_KINDS = ("move_in", "move_out")
 # Annahme (nicht rechtlich, nur organisatorisch): welche Dokumenttypen je Vertragsart vorhanden sein sollen
 REQUIRED_DOCS = {"main": ("mietvertrag",), "sub": ("mietvertrag", "uebergabeprotokoll")}
+TASK_LABEL = {"open": "Offen", "in_progress": "In Bearbeitung", "waiting": "Wartet auf Rückmeldung", "done": "Erledigt", "cancelled": "Abgebrochen"}
+REPAIR_LABEL = {"reported": "Gemeldet", "scheduled": "Terminiert", "in_progress": "In Arbeit", "waiting": "Wartet", "done": "Erledigt", "cancelled": "Abgebrochen"}

@@ -6,7 +6,7 @@ import { Badge, Card, EmptyState, PageHeader } from "../components/ui";
 import { Field, Modal, Select, Text } from "../components/Form";
 
 interface Party { id: number; display_name: string; kind: string; email: string | null; phone: string | null; city: string | null; roles: string[]; is_active: boolean }
-interface TenantRow { party_id: number; name: string; lease_id: number | null; lease_status?: string; spaces?: string[]; start_date?: string; end_date?: string | null; monthly_total?: { available: boolean; total?: string } | null; payment_status: string | null; last_activity: string | null }
+interface TenantRow { party_id: number; name: string; lease_id: number | null; lease_status?: string; spaces?: string[]; start_date?: string; end_date?: string | null; monthly_total?: { available: boolean; total?: string } | null; payment_status?: string | null; overdue_amount?: string; last_activity: string | null }
 const STATUS: Record<string, [string, "ok" | "warn" | "err"]> = { active: ["Aktiv", "ok"], terminated: ["Kündigung", "warn"], ended: ["Beendet", "err"], draft: ["Entwurf", "warn"] };
 
 function PartyForm({ role, onDone }: { role: string; onDone: () => void }) {
@@ -46,7 +46,7 @@ export function TenantsPage() {
       <Card>
         <div className="toolbar">
           <input className="field" placeholder="Mieter suchen …" value={q} onChange={(e) => setQ(e.target.value)} />
-          <Select value={status} onChange={setStatus} empty="Alle Status" options={[{ value: "active", label: "Aktiv" }, { value: "terminated", label: "Kündigung" }, { value: "ended", label: "Beendet" }, { value: "draft", label: "Entwurf" }]} />
+          <Select value={status} onChange={setStatus} empty="Alle Status" options={[{ value: "active", label: "Aktiv" }, { value: "terminated", label: "Kündigung" }, { value: "ended", label: "Beendet" }, { value: "draft", label: "Entwurf" }, { value: "arrears", label: "Zahlungsrückstand" }]} />
           <div className="grow" /><button className="btn primary" onClick={() => setOpen(true)}>Mieter anlegen</button>
         </div>
         {error && <div className="alert err">{error}</div>}
@@ -57,7 +57,7 @@ export function TenantsPage() {
                 <td><strong>{r.name}</strong></td><td>{r.spaces?.join("; ") ?? "–"}</td><td>{dateDe(r.start_date)}</td>
                 <td>{r.lease_status ? <Badge tone={STATUS[r.lease_status]?.[1] ?? "warn"}>{STATUS[r.lease_status]?.[0] ?? r.lease_status}</Badge> : "–"}</td>
                 <td>{r.monthly_total?.available ? eur(r.monthly_total.total) : "–"}</td>
-                <td className="muted">{r.payment_status ?? "ab Phase D"}</td><td>{r.last_activity ? dateDe(r.last_activity) : "–"}</td></tr>))}</tbody></table>)}
+                <td>{r.payment_status === "arrears" ? <Badge tone="err">Rückstand {eur(r.overdue_amount)}</Badge> : r.payment_status === "current" ? <Badge tone="ok">Ausgeglichen</Badge> : "–"}</td><td>{r.last_activity ? dateDe(r.last_activity) : "–"}</td></tr>))}</tbody></table>)}
       </Card>
       {open && <Modal title="Mieter anlegen" onClose={() => setOpen(false)}><PartyForm role="tenant" onDone={() => { setOpen(false); reload(); }} /></Modal>}
     </>

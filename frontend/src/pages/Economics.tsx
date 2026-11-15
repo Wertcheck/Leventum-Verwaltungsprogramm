@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { eur, useFetch } from "../lib/hooks";
+import { dateDe, eur, pref, useFetch } from "../lib/hooks";
 import { Card, PageHeader } from "../components/ui";
 import { Field, Select, Text } from "../components/Form";
 
@@ -21,11 +21,11 @@ export default function EconomicsPage() {
   const rus = useFetch<{ items: { id: number; label: string }[] }>("/rentable-units");
   const q = useMemo(() => (scope !== "portfolio" && !id ? null : `/economics?start=${from}-01&end=${monthEnd(to)}&scope=${scope}${scope !== "portfolio" ? `&id=${id}` : ""}`), [from, to, scope, id]);
   const { data, error } = useFetch<Rep>(q);
-  const opts = scope === "property" ? (props.data?.items ?? []).map((p) => ({ value: p.id, label: p.name })) : scope === "unit" ? (units.data?.items ?? []).map((u) => ({ value: u.id, label: `WE ${u.unit_number}` })) : (rus.data?.items ?? []).map((r) => ({ value: r.id, label: r.label }));
+  const opts = scope === "property" ? (props.data?.items ?? []).map((p) => ({ value: p.id, label: p.name })) : scope === "unit" ? (units.data?.items ?? []).map((u) => ({ value: u.id, label: pref("WE", u.unit_number) })) : (rus.data?.items ?? []).map((r) => ({ value: r.id, label: r.label }));
   return (
     <>
       <PageHeader title="Wirtschaftlichkeit" subtitle="Vorläufige Auswertung. Soll (Vertrag) und Ist (Zahlungen) werden getrennt gezeigt. Kautionen sind ausgeschlossen." />
-      <Card><div className="form-grid">
+      <Card><div className="filter-row">
         <Field label="Bereich"><Select value={scope} onChange={(v) => { setScope(v); setId(""); }} options={[{ value: "portfolio", label: "Gesamtes Portfolio" }, { value: "property", label: "Immobilie" }, { value: "unit", label: "Wohneinheit" }, { value: "rentable_unit", label: "Vermietungseinheit" }]} /></Field>
         {scope !== "portfolio" && <Field label="Auswahl"><Select value={id} onChange={setId} empty="– wählen –" options={opts} /></Field>}
         <Field label="Von (Monat)"><Text type="month" value={from} onChange={setFrom} /></Field><Field label="Bis (Monat)"><Text type="month" value={to} onChange={setTo} /></Field>
@@ -49,7 +49,7 @@ export default function EconomicsPage() {
             {data.contribution.utility_settlement_upstream && <><Row k="NK-Abrechnung Vermieter (+Nachzahlung / −Guthaben)" v={data.contribution.utility_settlement_upstream.balance} /><Row k="Soll-Basis inkl. NK-Abrechnung" v={data.contribution.soll_basis_incl_upstream_settlement} strong /></>}</dl>
             <p className="muted">Soll- und Ist-Basis nicht addieren. Kein Gewinn, sondern vorläufig.</p></Card>
           <Card><div className="card-head"><h2>Offen &amp; Leerstand</h2></div><dl className="kv">
-            <Row k={`Offene Forderungen (Stand ${data.offen_zum_stichtag.as_of})`} v={data.offen_zum_stichtag.receivables} /><Row k="davon überfällig (Rückstand)" v={data.offen_zum_stichtag.receivables_overdue} />
+            <Row k={`Offene Forderungen (Stand ${dateDe(data.offen_zum_stichtag.as_of)})`} v={data.offen_zum_stichtag.receivables} /><Row k="davon überfällig (Rückstand)" v={data.offen_zum_stichtag.receivables_overdue} />
             <Row k="Offene Verbindlichkeiten" v={data.offen_zum_stichtag.payables} /><Row k="Offene Rechnungen" v={data.offen_zum_stichtag.invoices} />
             <Row k="Wirtschaftlicher Leerstand (Teil der Hauptmiete)" v={data.vacancy.economic_vacancy_cost} /><dt>Physischer Leerstand</dt><dd>{data.vacancy.physical_vacancy_rate_by_count ? `${data.vacancy.physical_vacancy_rate_by_count.replace(".", ",")} %` : "–"}</dd></dl></Card>
         </div>

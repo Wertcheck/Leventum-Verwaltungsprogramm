@@ -24,7 +24,7 @@ from leventum.services import payments as pay
 from leventum.services.charges import BILLABLE_STATUS, month_range, monthly_components, open_amount
 from leventum.services.errors import ServiceError
 from leventum.services.leases import OPEN_END, effective_end
-from leventum.services.master import chain as ru_chain, get_or_404
+from leventum.services.master import chain as ru_chain, get_or_404, prefixed
 from leventum.services.utility import compute_statement, largest_remainder, q
 
 ZERO = Decimal("0.00")
@@ -87,20 +87,20 @@ class Structure:
                 continue
             pname = props[u.property_id].name
             self.unit_area[u.id] = u.living_area
-            self.unit_label[u.id] = f"{pname} · WE {u.unit_number}"
+            self.unit_label[u.id] = f"{pname} · {prefixed('WE', u.unit_number)}"
             rooms = list(db.scalars(select(Room).where(Room.unit_id == u.id, Room.is_active.is_(True)).order_by(Room.name)))
             base = (("P", u.property_id), ("U", u.id))
             if not rooms:
-                self._add(Leaf(base, u.property_id, u.id, Decimal(1), f"{pname} · WE {u.unit_number}"))
+                self._add(Leaf(base, u.property_id, u.id, Decimal(1), f"{pname} · {prefixed('WE', u.unit_number)}"))
                 continue
             by_area = all(r.area and r.area > 0 for r in rooms)
             for r in rooms:
                 rw = r.area if by_area else Decimal(1)
                 beds = list(db.scalars(select(Bed).where(Bed.room_id == r.id, Bed.is_active.is_(True)).order_by(Bed.label)))
                 if not beds:
-                    self._add(Leaf(base + (("R", r.id),), u.property_id, u.id, rw, f"{pname} · WE {u.unit_number} · Zimmer {r.name}"))
+                    self._add(Leaf(base + (("R", r.id),), u.property_id, u.id, rw, f"{pname} · {prefixed('WE', u.unit_number)} · {prefixed('Zimmer', r.name)}"))
                 for b in beds:
-                    self._add(Leaf(base + (("R", r.id), ("B", b.id)), u.property_id, u.id, rw / len(beds), f"{pname} · WE {u.unit_number} · Zimmer {r.name} · Bett {b.label}"))
+                    self._add(Leaf(base + (("R", r.id), ("B", b.id)), u.property_id, u.id, rw / len(beds), f"{pname} · {prefixed('WE', u.unit_number)} · {prefixed('Zimmer', r.name)} · {prefixed('Bett', b.label)}"))
 
     def _add(self, leaf: Leaf):
         self.leaves.append(leaf)

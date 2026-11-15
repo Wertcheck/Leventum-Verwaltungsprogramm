@@ -59,7 +59,7 @@ def test_status_workflow_completed_at_reopen_and_cancel_reason(w):
     with pytest.raises(ServiceError):
         T.update_task(w.db, None, t.id, {"status": "done"})  # Status nur über den Statuswechsel
     acts = [a.summary for a in w.db.scalars(select(AuditEvent).where(AuditEvent.entity_type == "task", AuditEvent.entity_id == str(t.id), AuditEvent.action == "task.status"))]
-    assert acts == ["Aufgabenstatus: open → in_progress", "Aufgabenstatus: in_progress → waiting", "Aufgabenstatus: waiting → done", "Aufgabenstatus: done → open", "Aufgabenstatus: open → cancelled"]
+    assert acts == ["Aufgabenstatus: Offen → In Bearbeitung", "Aufgabenstatus: In Bearbeitung → Wartet auf Rückmeldung", "Aufgabenstatus: Wartet auf Rückmeldung → Erledigt", "Aufgabenstatus: Erledigt → Offen", "Aufgabenstatus: Offen → Abgebrochen"]
 
 
 def test_filters_overdue_and_ordering(w):

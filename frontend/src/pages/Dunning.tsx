@@ -4,7 +4,7 @@ import { dateDe, eur, useFetch } from "../lib/hooks";
 import { Badge, Card, EmptyState, PageHeader } from "../components/ui";
 import { Modal } from "../components/Form";
 
-interface Cand { charge_id: number; lease_id: number; due_date: string; open_amount: string; days_overdue: number; proposed_level: number; state: string; charge_type: string }
+interface Cand { charge_id: number; lease_id: number; lease_label: string; due_date: string; open_amount: string; days_overdue: number; proposed_level: number; state: string; charge_type: string }
 interface Notice { id: number; lease_id: number; level: number; level_name: string; status: string; recipient_name: string; subject: string; body: string; total_open: string; review_hint: string | null; sent_on: string | null; lines?: unknown[] }
 const STATE: Record<string, string> = { due: "Mahnung fällig", waiting: "Wartefrist läuft", draft_exists: "Entwurf vorhanden", max_level_reached: "Höchste Stufe erreicht" };
 const NST: Record<string, [string, "ok" | "warn" | "err"]> = { draft: ["Entwurf", "warn"], approved: ["Freigegeben (nicht versandt)", "warn"], sent: ["Versandt (manuell dokumentiert)", "ok"], cancelled: ["Verworfen", "err"] };
@@ -50,7 +50,7 @@ export default function DunningPage() {
         <div className="card-head"><h2>Überfällige Forderungen</h2><button className="btn primary" disabled={due.length === 0} onClick={prepare}>Entwürfe vorbereiten ({due.length})</button></div>
         {cands.data && cands.data.items.length === 0 ? <EmptyState title="Keine überfälligen Forderungen" /> : (
           <table><thead><tr><th>Vertrag</th><th>Fällig</th><th>Offen (nach Teilzahlungen)</th><th>Überfällig</th><th>Nächste Stufe</th><th>Status</th></tr></thead>
-            <tbody>{cands.data?.items.map((c) => <tr key={c.charge_id}><td>#{c.lease_id}</td><td>{dateDe(c.due_date)}</td><td>{eur(c.open_amount)}</td><td>{c.days_overdue} Tage</td><td>{c.state === "max_level_reached" ? "–" : c.proposed_level}</td><td>{STATE[c.state]}</td></tr>)}</tbody></table>)}
+            <tbody>{cands.data?.items.map((c) => <tr key={c.charge_id}><td>{c.lease_label}</td><td>{dateDe(c.due_date)}</td><td>{eur(c.open_amount)}</td><td>{c.days_overdue} Tage</td><td>{c.state === "max_level_reached" ? "–" : c.proposed_level}</td><td>{STATE[c.state]}</td></tr>)}</tbody></table>)}
       </Card>
       <div style={{ height: 20 }} />
       <Card><div className="card-head"><h2>Mahnvorgänge</h2></div>

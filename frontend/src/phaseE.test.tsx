@@ -79,13 +79,17 @@ describe("Dashboard Hinweise", () => {
     warnings: [{ key: "contract_end:2:2026-12-31", type: "contract_end", severity: "warning", title: "Untermietvertrag #2 endet am 31.12.2026", detail: "Noch 21 Tage.", due_date: "2026-12-31", task_id: null },
                { key: "overdue:2:2026-01-01", type: "overdue_payment", severity: "critical", title: "Überfällige Zahlung – Vertrag #2: 1370.00 € offen", detail: "1 Sollstellung(en)", due_date: "2026-01-01", task_id: 12 }] };
   it("zeigt echte Hinweise; Aufgabe nur erstellbar, wenn noch keine existiert (Duplikatschutz in der UI)", async () => {
-    mockApi((url, init) => init?.method === "POST" ? { id: 13 } : url.includes("/dashboard") ? base : { items: [], last_backup_at: null, stale: false, age_hours: null });
+    const eco = { soll: { sub_total: "1370.00", main_total: "1030.00" }, ist: {}, offen_zum_stichtag: { receivables: "2740.00", receivables_overdue: "2740.00" }, vacancy: { economic_vacancy_cost: "412.00" }, contribution: { soll_basis: "340.00", ist_basis: "-30.00" } };
+    mockApi((url, init) => init?.method === "POST" ? { id: 13 } : url.includes("/dashboard") ? base : url.includes("/economics") ? eco : { items: [], last_backup_at: null, stale: false, age_hours: null });
     render(<MemoryRouter><Dashboard user={{ id: 1, username: "a", display_name: "Admin", role: "admin" }} /></MemoryRouter>);
     await screen.findByText(/Untermietvertrag #2 endet/);
     expect(screen.getByText("Dringend")).toBeTruthy();
     expect(screen.getAllByText("Aufgabe erstellen").length).toBe(1); // für die Erinnerung mit vorhandener Aufgabe (#12) gibt es nur den Link
     expect(screen.getByText("Aufgabe #12")).toBeTruthy();
     expect(screen.getByText("Kündigung prüfen")).toBeTruthy();
+    await screen.findByText("Wirtschaftlicher Überblick");
+    await waitFor(() => expect(document.body.textContent).toMatch(/340,00\s*€/));  // echte Zahlen statt Platzhaltertext
+    expect(document.body.textContent).not.toMatch(/Wird in Phase D/);
     fireEvent.click(screen.getByText("Aufgabe erstellen"));
     await waitFor(() => expect(posts().length).toBe(1));
     expect(JSON.parse(String(posts()[0].init?.body))).toEqual({ key: "contract_end:2:2026-12-31" });

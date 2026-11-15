@@ -11,6 +11,7 @@ from leventum.models import Invoice, Lease, Party, Property, Repair, RepairEvent
 from leventum.services import audit, payments as pay
 from leventum.services.errors import ServiceError
 from leventum.services.master import get_or_404
+from leventum.services.dunning import eur
 from leventum.services.utility import q
 
 
@@ -57,7 +58,7 @@ def update_repair(db: Session, actor_id: int | None, repair_id: int, data: dict)
             continue
         setattr(r, k, v)
         if k == "cost_estimate":
-            _event(db, r.id, "estimate", f"Kostenschätzung: {old if old is not None else '–'} → {v if v is not None else '–'} €", actor_id)
+            _event(db, r.id, "estimate", f"Kostenschätzung: {eur(old) if old is not None else '–'} → {eur(v) if v is not None else '–'}", actor_id)
         elif k == "contractor_party_id":
             _event(db, r.id, "contractor", "Dienstleister zugeordnet" if v else "Dienstleister entfernt", actor_id)
         elif k == "scheduled_for":
@@ -78,8 +79,8 @@ def set_status(db: Session, actor_id: int | None, repair_id: int, status: str, n
     old = r.status
     r.status = status
     r.completed_on = (on or date.today()) if status == "done" else None
-    _event(db, r.id, "status", f"Status: {old} → {status}" + (f" ({note})" if note else ""), actor_id)
-    audit.record(db, "repair.status", actor_user_id=actor_id, entity_type="repair", entity_id=r.id, summary=f"Reparaturstatus: {old} → {status}", details={"note": note})
+    _event(db, r.id, "status", f"Status: {domain.REPAIR_LABEL[old]} → {domain.REPAIR_LABEL[status]}" + (f" ({note})" if note else ""), actor_id)
+    audit.record(db, "repair.status", actor_user_id=actor_id, entity_type="repair", entity_id=r.id, summary=f"Reparaturstatus: {domain.REPAIR_LABEL[old]} → {domain.REPAIR_LABEL[status]}", details={"note": note})
     db.flush()
     return r
 
@@ -102,7 +103,7 @@ def link_invoice(db: Session, actor_id: int | None, repair_id: int, invoice_id: 
     if inv.repair_id not in (None, r.id):
         raise ServiceError("conflict", f"Die Rechnung ist bereits Reparatur {inv.repair_id} zugeordnet.", 409)
     inv.repair_id = r.id
-    _event(db, r.id, "invoice", f"Rechnung {inv.invoice_number or inv.id} ({inv.amount} €) verknüpft", actor_id)
+    _event(db, r.id, "invoice", f"Rechnung {inv.invoice_number or inv.id} ({eur(inv.amount)}) verknüpft", actor_id)
     audit.record(db, "repair.invoice_linked", actor_user_id=actor_id, entity_type="repair", entity_id=r.id, summary="Rechnung verknüpft", details={"invoice_id": inv.id})
     db.flush()
     return inv

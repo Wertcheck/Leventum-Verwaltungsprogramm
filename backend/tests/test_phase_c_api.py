@@ -31,7 +31,7 @@ def test_full_flow_over_http(auth_client):
     own, owner, tenant, prop, unit, room, bed, types = build(c)
     ru_prop = post(c, "/rentable-units", {"property_id": prop["id"]})
     ru_bed = post(c, "/rentable-units", {"property_id": prop["id"], "bed_id": bed["id"]})
-    assert ru_prop["level"] == "property" and ru_bed["level"] == "bed" and "Bett Bett A" in ru_bed["label"]
+    assert ru_prop["level"] == "property" and ru_bed["level"] == "bed" and ru_bed["label"].endswith("WE 03 · Zimmer 1 · Bett A")
     main = post(c, "/leases", {"kind": "main", "lease_type_id": types["hauptmiete"], "start_date": "2026-01-01", "subletting_permitted": True,
                                "parties": [{"party_id": owner["id"], "role": "lessor"}, {"party_id": own["id"], "role": "lessee"}],
                                "rentable_unit_ids": [ru_prop["id"]]})
@@ -51,7 +51,7 @@ def test_full_flow_over_http(auth_client):
     assert any(h["code"] == "legal_not_reviewed" for h in d["validation"]["hints"])
     # Mieterübersicht
     t = c.get(V + "/tenants").json()["items"]
-    assert t[0]["name"] == "Max Mustermann" and t[0]["lease_status"] == "active" and t[0]["payment_status"] is None
+    assert t[0]["name"] == "Max Mustermann" and t[0]["lease_status"] == "active" and t[0]["payment_status"] == "current" and t[0]["overdue_amount"] == "0.00"  # keine Sollstellung überfällig
     assert c.get(V + "/tenants?status=ended").json()["items"] == []
     # Wohneinheit gilt über Bettbelegung als belegt (Stichtag: heute liegt nach Vertragsende → vacant)
     u = c.get(V + "/units").json()["items"][0]

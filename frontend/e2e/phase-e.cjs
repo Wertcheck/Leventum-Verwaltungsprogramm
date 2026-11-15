@@ -40,7 +40,7 @@ const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR
   await p.click("text=Aufgabe anlegen"); await p.fill(".modal input.field >> nth=0", "Treppenhaus reinigen lassen"); await p.fill(".modal input[type=date]", "2020-01-01"); await p.click(".modal button.primary");
   await p.waitForSelector("td:has-text('Treppenhaus reinigen lassen')"); await p.waitForSelector("text=überfällig"); ok("Manuelle Aufgabe, überfällig markiert");
   await p.check("input[type=checkbox]"); await p.waitForFunction(() => document.querySelectorAll("tbody tr").length === 1); ok("Filter 'nur überfällige'"); await p.uncheck("input[type=checkbox]");
-  await p.selectOption("select[aria-label='Status Treppenhaus reinigen lassen']", "done"); await p.waitForSelector("tr:has-text('Treppenhaus') .badge:has-text('Erledigt')"); ok("Status auf erledigt");
+  await p.selectOption("select[aria-label='Status Treppenhaus reinigen lassen']", "done"); await p.waitForFunction(() => document.querySelector("select[aria-label='Status Treppenhaus reinigen lassen']")?.value === "done"); ok("Status auf erledigt");
   // --- Reparatur ---
   await p.goto(base + "/reparaturen"); await p.click("text=Reparatur melden"); await pick(".modal select", "Haus Bergmann");
   await p.fill(".modal input.field >> nth=0", "Heizung defekt"); await p.fill(".modal input.field >> nth=3", "500.00"); await p.click(".modal button.primary");

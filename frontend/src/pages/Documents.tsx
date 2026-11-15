@@ -5,7 +5,8 @@ import { Card, EmptyState, PageHeader } from "../components/ui";
 import { Field, Modal, Select } from "../components/Form";
 import { DOC_TYPES, DocRow, type Doc } from "../components/DocPanel";
 
-const ENT: Record<string, string> = { party: "Partei", property: "Objekt", lease: "Vertrag", repair: "Reparatur" };
+const ENT: Record<string, string> = { party: "Partei", property: "Objekt", unit: "Wohneinheit", lease: "Vertrag", invoice: "Rechnung", deposit: "Kaution", deposit_transaction: "Kautionsbuchung", payment: "Zahlung", repair: "Reparatur", task: "Aufgabe", communication: "Kommunikation", handover_protocol: "Übergabeprotokoll" };
+const UPLOAD_ENT = ["party", "property", "lease", "repair"];
 
 export default function DocumentsPage() {
   const [q, setQ] = useState(""), [type, setType] = useState(""), [deleted, setDeleted] = useState(false), [open, setOpen] = useState(false);
@@ -34,10 +35,10 @@ export default function DocumentsPage() {
           <label style={{ flexDirection: "row", alignItems: "center", fontWeight: 400 }}><input type="checkbox" checked={deleted} onChange={(e) => setDeleted(e.target.checked)} /> gelöschte anzeigen</label>
           <div className="grow" /><button className="btn primary" onClick={() => setOpen(true)}>Dokument hochladen</button></div>
         {error && <div className="alert err">{error}</div>}
-        {data && data.items.length === 0 ? <EmptyState title="Keine Dokumente" /> : data?.items.map((d) => <div key={d.id}><DocRow d={d} onChanged={reload} /><div className="muted" style={{ marginTop: -8, marginBottom: 8 }}>{d.links.map((l) => `${ENT[l.entity_type] ?? l.entity_type} #${l.entity_id}`).join(", ")}</div></div>)}
+        {data && data.items.length === 0 ? <EmptyState title="Keine Dokumente" /> : data?.items.map((d) => <DocRow key={d.id} d={d} onChanged={reload} extra={d.links.map((l) => `${ENT[l.entity_type] ?? l.entity_type} #${l.entity_id}`).join(", ")} />)}
       </Card>
       {open && <Modal title="Dokument hochladen" onClose={() => setOpen(false)}><div className="form-grid">
-        <Field label="Zuordnung zu"><Select value={f.entity} onChange={(v) => setF({ ...f, entity: v, target: "" })} options={Object.entries(ENT).map(([value, label]) => ({ value, label }))} /></Field>
+        <Field label="Zuordnung zu"><Select value={f.entity} onChange={(v) => setF({ ...f, entity: v, target: "" })} options={UPLOAD_ENT.map((value) => ({ value, label: ENT[value] }))} /></Field>
         <Field label="Ziel"><Select value={f.target ?? ""} onChange={set("target")} empty="– wählen –" options={targets} /></Field>
         <Field label="Dokumenttyp"><Select value={f.type} onChange={set("type")} options={Object.entries(DOC_TYPES).map(([value, label]) => ({ value, label }))} /></Field>
         <Field label="Datei (PDF, Bild, Office, CSV/TXT)"><input className="field" type="file" aria-label="Datei" onChange={(e) => setFile(e.target.files?.[0] ?? null)} /></Field>

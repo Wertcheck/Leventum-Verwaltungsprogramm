@@ -74,7 +74,7 @@ export function RepairDetail() {
       <div style={{ height: 20 }} />
       <div className="grid two-col">
         <Card><div className="card-head"><h2>Aufgaben</h2><button className="btn small" onClick={() => setTaskOpen(true)}>+ Aufgabe</button></div>
-          {data.tasks.length === 0 ? <p className="muted">Keine Aufgaben.</p> : data.tasks.map((t) => <div className="list-row" key={t.id}><span className="grow">{t.title} <TaskLinks t={t} /></span><Badge tone={t.status === "done" ? "ok" : "warn"}>{TSTATUS[t.status]}</Badge></div>)}</Card>
+          {data.tasks.length === 0 ? <p className="muted">Keine Aufgaben.</p> : data.tasks.map((t) => <div className="list-row" key={t.id}><span className="grow">{t.title} <TaskLinks t={t} hideRepair /></span><Badge tone={t.status === "done" ? "ok" : "warn"}>{TSTATUS[t.status]}</Badge></div>)}</Card>
         <DocPanel entityType="repair" entityId={data.id} defaultType="reparaturbeleg" title="Fotos & Belege" />
       </div>
       <p style={{ marginTop: 12 }}><Link className="link" to={`/objekte/${data.property_id}`}>Zum Objekt</Link></p>

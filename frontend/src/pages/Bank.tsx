@@ -4,7 +4,7 @@ import { dateDe, eur, useFetch } from "../lib/hooks";
 import { Badge, Card, EmptyState, PageHeader } from "../components/ui";
 import { Field, Select } from "../components/Form";
 
-interface Sugg { kind: string; score: number; reasons: string[]; lease_id?: number; invoice_id?: number; deposit_id?: number; deposit_kind?: string; allocations?: { charge_id?: number; invoice_id?: number; amount: string }[]; unallocated_remainder?: string }
+interface Sugg { kind: string; score: number; reasons: string[]; lease_id?: number; lease_label?: string; invoice_id?: number; invoice_label?: string; deposit_id?: number; deposit_kind?: string; allocations?: { charge_id?: number; invoice_id?: number; amount: string }[]; unallocated_remainder?: string }
 interface Txn { id: number; booking_date: string; amount: string; counterparty_name: string | null; reference: string | null; status: string; suggestions?: Sugg[]; unmatched?: boolean; ignore_reason: string | null }
 interface Preview { errors: { row: number; message: string }[]; total_rows: number; new_rows: number; duplicate_rows: number; file_already_imported: boolean }
 
@@ -21,7 +21,7 @@ export function SuggestionRow({ t, onDone }: { t: Txn; onDone: () => void }) {
     <tr>
       <td>{dateDe(t.booking_date)}</td><td>{t.counterparty_name ?? "–"}<div className="muted">{t.reference}</div></td><td>{eur(t.amount)}</td>
       <td>{t.status === "open" ? (t.suggestions?.length ? t.suggestions.map((s, i) => (
-        <div key={i} style={{ marginBottom: 8 }}><Badge tone="ok">Vorschlag ({s.score})</Badge> {s.kind === "charges" ? `Vertrag #${s.lease_id}: ${s.allocations?.length} Sollstellung(en)` : s.kind === "invoice" ? `Rechnung #${s.invoice_id}` : `Kaution #${s.deposit_id}`}
+        <div key={i} style={{ marginBottom: 8 }}><Badge tone="ok">Vorschlag ({s.score})</Badge> {s.kind === "charges" ? `${s.lease_label ?? `Vertrag #${s.lease_id}`}: ${s.allocations?.length} Sollstellung(en)` : s.kind === "invoice" ? `Rechnung ${s.invoice_label ?? `#${s.invoice_id}`}` : `Kaution #${s.deposit_id}`}
           <div className="muted">{s.reasons.join("; ")}{s.unallocated_remainder && s.unallocated_remainder !== "0.00" ? ` · Rest ${eur(s.unallocated_remainder)} bleibt unzugeordnet` : ""}</div>
           <button className="btn small primary" onClick={() => confirm(s)}>Zuordnung bestätigen</button></div>)) : <Badge tone="err">Nicht zuordenbar – manuell prüfen</Badge>) : <Badge tone={t.status === "confirmed" ? "ok" : "warn"}>{t.status === "confirmed" ? "Bestätigt" : `Ausgeblendet: ${t.ignore_reason}`}</Badge>}
         {err && <div className="alert err">{err}</div>}</td>

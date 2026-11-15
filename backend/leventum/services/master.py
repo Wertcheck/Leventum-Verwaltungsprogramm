@@ -209,12 +209,26 @@ def spatially_related(a: RentableUnit, b: RentableUnit) -> bool:
     return ca[:n] == cb[:n]
 
 
+def prefixed(prefix: str, value: str) -> str:
+    """'WE' + '03' → 'WE 03', aber 'WE' + 'WE 03' bleibt 'WE 03' (keine Doppelung, wenn die Bezeichnung das Präfix schon enthält)."""
+    return value if value.strip().lower().startswith(prefix.lower()) else f"{prefix} {value}"
+
+
 def space_label(db: Session, ru: RentableUnit) -> str:
     parts = [db.get(Property, ru.property_id).name]
     if ru.unit_id:
-        parts.append(f"WE {db.get(Unit, ru.unit_id).unit_number}")
+        parts.append(prefixed("WE", db.get(Unit, ru.unit_id).unit_number))
     if ru.room_id:
-        parts.append(f"Zimmer {db.get(Room, ru.room_id).name}")
+        parts.append(prefixed("Zimmer", db.get(Room, ru.room_id).name))
     if ru.bed_id:
-        parts.append(f"Bett {db.get(Bed, ru.bed_id).label}")
+        parts.append(prefixed("Bett", db.get(Bed, ru.bed_id).label))
     return " · ".join(parts)
+
+
+def lease_title(db: Session, lease) -> str:
+    """Sprechende Bezeichnung für Listen: Mieter bzw. Vermieter + Mietgegenstand (statt nur '#4')."""
+    roles = ("lessee", "co_lessee") if lease.kind == "sub" else ("lessor",)
+    names = ", ".join(p.party.display_name for p in lease.parties if p.role in roles) or "–"
+    spaces = [space_label(db, i.rentable_unit) for i in lease.items]
+    where = spaces[0] + (f" (+{len(spaces) - 1})" if len(spaces) > 1 else "") if spaces else ""
+    return f"{names} · {where}" if where else names

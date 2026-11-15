@@ -17,6 +17,7 @@ from leventum.models import (AppUser, BankAccount, BankImport, BankTransaction, 
                              LeaseAllocationWeight, Payment, Unit)
 from leventum.services import bank as B, charges as C, deposits as D, documents as DOC, dunning as DN, economics as E, payments as P
 from leventum.services.errors import ServiceError
+from leventum.services import master as M
 from leventum.services.master import get_or_404
 from leventum.storage import LocalFileStore
 
@@ -36,7 +37,7 @@ def _dump(m, **kw):
 
 # --- Sollstellungen --------------------------------------------------------------------------------------------------------------
 def charge_out(db: Session, c: Charge) -> dict:
-    return {**ser(c), "open_amount": js(C.open_amount(db, c)) if not c.voided_at else None, "allocated": js(C.allocated(db, c.id)),
+    return {**ser(c), "lease_label": M.lease_title(db, db.get(Lease, c.lease_id)), "open_amount": js(C.open_amount(db, c)) if not c.voided_at else None, "allocated": js(C.allocated(db, c.id)),
             "status": "voided" if c.voided_at else ("paid" if C.open_amount(db, c) <= 0 else "partial" if C.allocated(db, c.id) > 0 else "open")}
 
 
@@ -229,7 +230,9 @@ def notice_out(n: DunningNotice, full: bool = True) -> dict:
 
 @router.get("/dunning/overdue", dependencies=[FR])
 def dunning_overdue(as_of: date | None = None, grace_days: int = Query(0, ge=0, le=60), db: Session = Depends(get_db)):
-    return {"items": js(DN.candidates(db, as_of, grace_days)), "min_days_between_levels": DN.MIN_DAYS_BETWEEN_LEVELS,
+    items = DN.candidates(db, as_of, grace_days)
+    labels = {i["lease_id"]: M.lease_title(db, db.get(Lease, i["lease_id"])) for i in items}
+    return {"items": js([{**i, "lease_label": labels[i["lease_id"]]} for i in items]), "min_days_between_levels": DN.MIN_DAYS_BETWEEN_LEVELS,
             "note": "Gebühren und Verzugszinsen werden nicht berechnet. Es erfolgt kein automatischer Versand."}
 
 
@@ -342,6 +345,9 @@ def txn_out(db: Session, t: BankTransaction, with_suggestions: bool) -> dict:
     o.pop("raw", None)
     if with_suggestions and t.status == "open":
         s = B.suggest(db, t)
+        for x in s:
+            if x.get("lease_id"):
+                x["lease_label"] = M.lease_title(db, db.get(Lease, x["lease_id"]))
         o["suggestions"], o["unmatched"] = js(s), not s
     return o
 

@@ -29,7 +29,7 @@ def test_hierarchy_levels_and_rentable_unit_chain(w):
     b = ru["bed"]
     assert (b.unit_id, b.room_id, b.bed_id) == (w.we1.id, w.room1.id, w.bed1.id)  # Ahnen mitgesetzt
     assert w.ru_bed(w.bed1).id == b.id  # idempotent
-    assert M.space_label(w.db, b) == "Haus Bergmann · WE WE 1 · Zimmer Zimmer 1 · Bett Bett A"
+    assert M.space_label(w.db, b) == "Haus Bergmann · WE 1 · Zimmer 1 · Bett A"
 
 
 def test_rentable_unit_rejects_inconsistent_hierarchy(w):

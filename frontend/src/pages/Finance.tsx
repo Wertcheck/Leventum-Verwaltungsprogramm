@@ -1,17 +1,18 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { api, ApiError } from "../lib/api";
 import { dateDe, eur, useFetch } from "../lib/hooks";
 import { Badge, Card, EmptyState, PageHeader } from "../components/ui";
 import { Field, Modal, Select, Text } from "../components/Form";
 
-export interface ChargeRow { id: number; lease_id: number; direction: string; charge_type: string; period_start: string; due_date: string; amount: string; open_amount: string | null; allocated: string; status: string }
+export interface ChargeRow { id: number; lease_id: number; lease_label: string; direction: string; charge_type: string; period_start: string; due_date: string; amount: string; open_amount: string | null; allocated: string; status: string }
 interface PaymentRow { id: number; direction: string; booking_date: string; amount: string; signed_amount: string; is_reversal: boolean; reversed: boolean; allocated: string; unallocated: string; reference: string | null; source: string }
 export const CHARGE_LABEL: Record<string, string> = { base_rent: "Kaltmiete", other_charges: "Zuschlag", utility_prepayment: "NK-Vorauszahlung", utility_flat_rate: "NK-Pauschale", other: "Sonstige" };
 const ST: Record<string, [string, "ok" | "warn" | "err"]> = { open: ["Offen", "warn"], partial: ["Teilzahlung", "warn"], paid: ["Bezahlt", "ok"], voided: ["Storniert", "err"] };
 
 export default function FinancePage() {
-  const [dir, setDir] = useState(""), [status, setStatus] = useState("");
-  const charges = useFetch<{ items: ChargeRow[] }>(`/charges?${new URLSearchParams({ ...(dir && { direction: dir }), ...(status && { status }) })}`);
+  const [dir, setDir] = useState(""), [status, setStatus] = useState(""), [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
+  const charges = useFetch<{ items: ChargeRow[] }>(`/charges?${new URLSearchParams({ ...(dir && { direction: dir }), ...(status && { status }), ...(month && { month }) })}`);
   const pays = useFetch<{ items: PaymentRow[] }>("/payments");
   const [msg, setMsg] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
   const [open, setOpen] = useState<null | "pay" | "gen">(null);
@@ -20,6 +21,7 @@ export default function FinancePage() {
   const reload = () => { charges.reload(); pays.reload(); };
   async function run(fn: () => Promise<unknown>, ok: string) { setMsg(null); try { await fn(); if (ok) setMsg({ tone: "ok", text: ok }); setOpen(null); reload(); } catch (e) { setMsg({ tone: "err", text: e instanceof ApiError ? e.message : "Fehler" }); } }
   const gen = () => run(async () => { const r = await api<{ created_count: number; skipped_existing: number; conflicts: unknown[] }>("/charges/generate", { method: "POST", json: { from_month: f.from, through_month: f.to } });
+    if (f.from) setMonth(f.from.slice(0, 7));  // Liste springt zum ersten erzeugten Monat, damit das Ergebnis sichtbar ist
     setMsg({ tone: r.conflicts.length ? "err" : "ok", text: `${r.created_count} erzeugt, ${r.skipped_existing} bereits vorhanden, ${r.conflicts.length} Konflikte (abweichender Betrag – bestehende Sollstellung wurde nicht verändert).` }); }, "");
   return (
     <>
@@ -29,10 +31,10 @@ export default function FinancePage() {
         <div className="card-head"><h2>Sollstellungen</h2><div className="toolbar" style={{ margin: 0 }}>
           <Select value={dir} onChange={setDir} empty="Alle" options={[{ value: "receivable", label: "Forderungen (Untermieter)" }, { value: "payable", label: "Verbindlichkeiten (Vermieter)" }]} />
           <Select value={status} onChange={setStatus} empty="Alle Status" options={[{ value: "open", label: "Offen" }, { value: "partial", label: "Teilzahlung" }, { value: "paid", label: "Bezahlt" }, { value: "overdue", label: "Überfällig" }]} />
-          <button className="btn primary" onClick={() => setOpen("gen")}>Sollstellungen erzeugen</button></div></div>
+          <Text type="month" value={month} onChange={setMonth} /><button className="btn primary" onClick={() => setOpen("gen")}>Sollstellungen erzeugen</button></div></div>
         {charges.data && charges.data.items.length === 0 ? <EmptyState title="Keine Sollstellungen" /> : (
           <table><thead><tr><th>Vertrag</th><th>Art</th><th>Monat</th><th>Fällig</th><th>Betrag</th><th>Offen</th><th>Status</th></tr></thead>
-            <tbody>{charges.data?.items.map((c) => <tr key={c.id}><td>#{c.lease_id} {c.direction === "receivable" ? "← Mieter" : "→ Vermieter"}</td><td>{CHARGE_LABEL[c.charge_type]}</td><td>{c.period_start.slice(0, 7)}</td><td>{dateDe(c.due_date)}</td><td>{eur(c.amount)}</td><td>{eur(c.open_amount)}</td><td><Badge tone={ST[c.status][1]}>{ST[c.status][0]}</Badge></td></tr>)}</tbody></table>)}
+            <tbody>{charges.data?.items.map((c) => <tr key={c.id}><td><Link className="link" to={`/vertraege/${c.lease_id}`}>{c.lease_label}</Link><div className="muted">{c.direction === "receivable" ? "Forderung gegen Mieter" : "Verbindlichkeit an Vermieter"}</div></td><td>{CHARGE_LABEL[c.charge_type]}</td><td>{c.period_start.slice(0, 7)}</td><td>{dateDe(c.due_date)}</td><td>{eur(c.amount)}</td><td>{eur(c.open_amount)}</td><td><Badge tone={ST[c.status][1]}>{ST[c.status][0]}</Badge></td></tr>)}</tbody></table>)}
       </Card>
       <div style={{ height: 20 }} />
       <Card>
@@ -53,7 +55,7 @@ export default function FinancePage() {
         <Field label="Buchungsdatum"><Text type="date" value={f.date ?? ""} onChange={set("date")} /></Field>
         <Field label="Betrag (€)"><Text value={f.amount ?? ""} onChange={set("amount")} placeholder="1370.00" /></Field>
         <Field label="Verwendungszweck"><Text value={f.ref ?? ""} onChange={set("ref")} /></Field>
-        <Field label="Sollstellung zuordnen (optional)"><Select value={f.charge ?? ""} onChange={set("charge")} empty="– nicht zuordnen –" options={(charges.data?.items ?? []).filter((c) => c.status === "open" || c.status === "partial").filter((c) => (c.direction === "receivable") === (f.direction === "in")).map((c) => ({ value: c.id, label: `#${c.lease_id} ${CHARGE_LABEL[c.charge_type]} ${c.period_start.slice(0, 7)} – offen ${eur(c.open_amount)}` }))} /></Field>
+        <Field label="Sollstellung zuordnen (optional)"><Select value={f.charge ?? ""} onChange={set("charge")} empty="– nicht zuordnen –" options={(charges.data?.items ?? []).filter((c) => c.status === "open" || c.status === "partial").filter((c) => (c.direction === "receivable") === (f.direction === "in")).map((c) => ({ value: c.id, label: `${c.lease_label} – ${CHARGE_LABEL[c.charge_type]} ${c.period_start.slice(0, 7)} – offen ${eur(c.open_amount)}` }))} /></Field>
         <div className="full"><button className="btn primary" onClick={() => run(() => api("/payments", { method: "POST", json: { direction: f.direction, booking_date: f.date, amount: f.amount, reference: f.ref || null, allocations: f.charge ? [{ charge_id: Number(f.charge), amount: f.amount }] : [] } }), "Zahlung erfasst.")}>Speichern</button></div></div></Modal>}
     </>
   );

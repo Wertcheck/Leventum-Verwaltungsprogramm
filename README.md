@@ -1,7 +1,7 @@
 # Leventum Verwaltung (Rent-to-Rent)
 
 Lokale Windows-Desktop-Anwendung (FastAPI + React/TypeScript + SQLite, später PostgreSQL) zur Verwaltung von Hauptmiet- und Untermietverhältnissen.
-Dokumentation: [`docs/`](docs/) · Berichte: [`Phase A+B`](docs/ABSCHLUSSBERICHT_PHASE_A_B.md) · [`Phase C`](docs/ABSCHLUSSBERICHT_PHASE_C.md) · [`Phase D`](docs/ABSCHLUSSBERICHT_PHASE_D.md) · [`Phase E`](docs/ABSCHLUSSBERICHT_PHASE_E.md)
+Dokumentation: [`docs/`](docs/) · Berichte: [`Phase A+B`](docs/ABSCHLUSSBERICHT_PHASE_A_B.md) · [`Phase C`](docs/ABSCHLUSSBERICHT_PHASE_C.md) · [`Phase D`](docs/ABSCHLUSSBERICHT_PHASE_D.md) · [`Phase E`](docs/ABSCHLUSSBERICHT_PHASE_E.md) · [`UI-Prüfung mit Screenshots`](docs/UI_PRUEFBERICHT_SCREENSHOTS.md)
 
 ## Entwicklung
 ```bash
@@ -22,3 +22,5 @@ Die SQLite-Datenbank ist nur für den Einzelplatzbetrieb gedacht. Für mehrere g
 
 ## Manuelle Browser-Durchläufe (Playwright, optional)
 `frontend/e2e/phase-c.cjs`, `phase-d.cjs` und `phase-e.cjs` – Anleitung im Kopf der Dateien (frische Datenbank, laufender Server).
+
+`frontend/e2e/seed-and-shoot.cjs` befüllt eine **frische** Instanz mit erfundenen Demodaten und erzeugt die Screenshots in `docs/screenshots/` (nur für Abnahme/Doku, nie gegen echte Daten).

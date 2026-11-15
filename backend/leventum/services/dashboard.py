@@ -20,8 +20,8 @@ KPI_DEFINITIONS = [
     ("open_tasks", "Offene Aufgaben", "E"),
     ("overdue_tasks", "Überfällige Aufgaben", "E"),
     ("open_repairs", "Offene Reparaturen", "E"),
-    ("physical_vacancy", "Physischer Leerstand (unbelegte Betten/Zimmer/Einheiten)", "D"),
-    ("economic_vacancy_cost", "Wirtschaftlicher Leerstand (Kosten, laufender Monat)", "D"),
+    ("physical_vacancy", "Physischer Leerstand", "D"),
+    ("economic_vacancy_cost", "Wirtschaftlicher Leerstand (Monat)", "D"),
     ("upcoming_contract_ends", "Anstehende Vertragsenden", "C"),
 ]
 
@@ -52,8 +52,11 @@ def _upcoming_ends(db):
 
 
 def _fig(db):
+    """Die Monatsauswertung ist aufwendig und wird je Dashboard-Aufruf (= je Session) nur einmal berechnet."""
     from leventum.services.economics import current_month_figures
-    return current_month_figures(db)
+    if "_fig" not in db.info:
+        db.info["_fig"] = current_month_figures(db)
+    return db.info["_fig"]
 
 
 # Implementierte Kennzahlen: key -> (Funktion(db) -> Wert, Format). Geld als String-Dezimal.
