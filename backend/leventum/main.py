@@ -83,6 +83,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def service_error(_: Request, exc: ServiceError):
         return JSONResponse({"detail": {"code": exc.code, "detail": exc.message, "details": exc.details}}, status_code=exc.status)
 
+    @app.middleware("http")
+    async def security_headers(request: Request, call_next):
+        resp = await call_next(request)
+        resp.headers["Content-Security-Policy"] = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; "
+                                                   "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'")
+        resp.headers["X-Content-Type-Options"] = "nosniff"
+        resp.headers["X-Frame-Options"] = "DENY"
+        resp.headers["Referrer-Policy"] = "no-referrer"
+        resp.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        if request.url.path.startswith("/api/"):
+            resp.headers["Cache-Control"] = "no-store"  # personenbezogene API-Antworten nicht zwischenspeichern
+        return resp
+
     app.include_router(public, prefix="/api/v1")
     app.include_router(protected, prefix="/api/v1", dependencies=[Depends(current_user)])
 

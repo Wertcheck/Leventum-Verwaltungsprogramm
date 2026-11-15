@@ -94,24 +94,33 @@ def backups_list(settings: Settings = Depends(get_settings)):
     return {"items": backup_svc.list_backups(settings), **backup_svc.latest_backup_info(settings)}
 
 
+class BackupCreate(BaseModel):
+    passphrase: str | None = Field(default=None, max_length=256)  # optional: verschlüsselte Sicherung (AES-256-GCM); die Passphrase wird NICHT gespeichert
+
+
+class PassphraseBody(BaseModel):
+    passphrase: str | None = Field(default=None, max_length=256)
+
+
 @backup_router.post("")
-def backups_create(request: Request, db: Session = Depends(get_db), user: AppUser = Depends(current_user),
+def backups_create(request: Request, body: BackupCreate | None = None, db: Session = Depends(get_db), user: AppUser = Depends(current_user),
                    settings: Settings = Depends(get_settings)):
+    pw = body.passphrase if body and body.passphrase else None
     try:
-        path = backup_svc.create_backup(request.app.state.engine, settings)
+        path = backup_svc.create_backup(request.app.state.engine, settings, passphrase=pw)
     except backup_svc.BackupError as e:
         raise HTTPException(400, detail={"code": "backup_failed", "detail": str(e)})
-    res = backup_svc.verify_backup(path)
+    res = backup_svc.verify_backup(path, pw)
     audit.record(db, "backup.created", actor_user_id=user.id, entity_type="backup", entity_id=path.name,
-                 summary="Backup erstellt", details={"verified": res.ok})
+                 summary="Backup erstellt", details={"verified": res.ok, "encrypted": bool(pw)})
     db.commit()
-    return {"id": path.name, "verified": res.ok, "problems": res.problems}
+    return {"id": path.name, "encrypted": bool(pw), "verified": res.ok, "problems": res.problems}
 
 
 @backup_router.post("/{backup_id}/verify")
-def backups_verify(backup_id: str, settings: Settings = Depends(get_settings)):
+def backups_verify(backup_id: str, body: PassphraseBody | None = None, settings: Settings = Depends(get_settings)):
     try:
-        res = backup_svc.verify_backup(backup_svc.resolve_backup(settings, backup_id))
+        res = backup_svc.verify_backup(backup_svc.resolve_backup(settings, backup_id), body.passphrase if body else None)
     except backup_svc.BackupError as e:
         raise HTTPException(404, detail={"code": "not_found", "detail": str(e)})
     return {"ok": res.ok, "problems": res.problems}
@@ -119,6 +128,7 @@ def backups_verify(backup_id: str, settings: Settings = Depends(get_settings)):
 
 class RestoreRequest(BaseModel):
     confirm: bool = False
+    passphrase: str | None = Field(default=None, max_length=256)
 
 
 @backup_router.post("/{backup_id}/restore")
@@ -132,7 +142,7 @@ def backups_restore(backup_id: str, body: RestoreRequest, request: Request, db: 
                      summary="Wiederherstellung gestartet")
         db.commit()
         db.close()
-        safety = backup_svc.restore_backup(request.app.state.engine, settings, path)
+        safety = backup_svc.restore_backup(request.app.state.engine, settings, path, body.passphrase)
     except backup_svc.BackupError as e:
         raise HTTPException(400, detail={"code": "restore_failed", "detail": str(e)})
     return {"ok": True, "safety_backup": safety.name, "note": "Bitte erneut anmelden."}

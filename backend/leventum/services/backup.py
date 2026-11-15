@@ -16,6 +16,7 @@ from sqlalchemy.engine import Engine
 
 from leventum import __version__
 from leventum.config import Settings
+from leventum.services import backup_crypto as BC
 
 FORMAT = 1
 DB_NAME = "database.sqlite3"
@@ -57,7 +58,7 @@ def _schema_revision(db_file: Path) -> str | None:
         con.close()
 
 
-def create_backup(engine: Engine, settings: Settings, label: str = "manual") -> Path:
+def create_backup(engine: Engine, settings: Settings, label: str = "manual", passphrase: str | None = None) -> Path:
     src = _db_path(engine)
     settings.backups_path.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
@@ -86,10 +87,29 @@ def create_backup(engine: Engine, settings: Settings, label: str = "manual") -> 
                         "schema_revision": _schema_revision(snap), "files": files}
             z.writestr("manifest.json", json.dumps(manifest, indent=2))
         part.replace(target)
+    if passphrase:  # optional verschlüsseln; die unverschlüsselte Zwischendatei wird sofort entfernt
+        enc = target.with_name(target.name + ".enc")
+        try:
+            BC.encrypt_file(target, enc, passphrase)
+        except BC.CryptoError as e:
+            target.unlink(missing_ok=True)
+            raise BackupError(e.message)
+        target.unlink()
+        return enc
     return target
 
 
-def verify_backup(path: Path) -> VerifyResult:
+def verify_backup(path: Path, passphrase: str | None = None) -> VerifyResult:
+    if path.suffix == ".enc" or BC.is_encrypted(path):
+        if not passphrase:
+            return VerifyResult(False, ["Verschlüsselte Sicherung: Passphrase erforderlich."])
+        with tempfile.TemporaryDirectory() as tmp:
+            plain = Path(tmp) / "b.zip"
+            try:
+                BC.decrypt_file(path, plain, passphrase)
+            except BC.CryptoError as e:
+                return VerifyResult(False, [e.message])
+            return verify_backup(plain)
     problems: list[str] = []
     try:
         with zipfile.ZipFile(path) as z:
@@ -129,8 +149,8 @@ def verify_backup(path: Path) -> VerifyResult:
 def list_backups(settings: Settings) -> list[dict]:
     out = []
     if settings.backups_path.exists():
-        for p in sorted(settings.backups_path.glob("leventum-backup-*.zip"), reverse=True):
-            out.append({"id": p.name, "size": p.stat().st_size,
+        for p in sorted([*settings.backups_path.glob("leventum-backup-*.zip"), *settings.backups_path.glob("leventum-backup-*.zip.enc")], key=lambda x: x.name, reverse=True):
+            out.append({"id": p.name, "encrypted": p.name.endswith(".enc"), "size": p.stat().st_size,
                         "created_at": datetime.fromtimestamp(p.stat().st_mtime, timezone.utc).isoformat()})
     return out
 
@@ -142,13 +162,18 @@ def resolve_backup(settings: Settings, backup_id: str) -> Path:
     return p
 
 
-def restore_backup(engine: Engine, settings: Settings, backup: Path) -> Path:
+def restore_backup(engine: Engine, settings: Settings, backup: Path, passphrase: str | None = None) -> Path:
     """Stellt DB + Dokumente wieder her. Legt vorher ein Sicherheits-Backup des Ist-Zustands an.
     Gibt den Pfad des Sicherheits-Backups zurück. Der alte Stand bleibt bei jedem Fehler vor dem Austausch erhalten."""
-    res = verify_backup(backup)
+    res = verify_backup(backup, passphrase)
     if not res.ok:
         raise BackupError("Backup ist nicht intakt: " + "; ".join(res.problems))
     db_file = _db_path(engine)
+    if backup.suffix == ".enc":  # entschlüsseln und von der Klartext-Kopie wiederherstellen
+        with tempfile.TemporaryDirectory(dir=settings.data_dir) as tmp:
+            plain = Path(tmp) / "restore.zip"
+            BC.decrypt_file(backup, plain, passphrase or "")
+            return restore_backup(engine, settings, plain)
     safety = create_backup(engine, settings, label="pre-restore")
     with tempfile.TemporaryDirectory(dir=settings.data_dir) as tmp:
         tmp_p = Path(tmp)
@@ -177,7 +202,7 @@ def restore_backup(engine: Engine, settings: Settings, backup: Path) -> Path:
 
 def latest_backup_info(settings: Settings) -> dict:
     items = list_backups(settings)
-    items = [i for i in items if not i["id"].endswith("-pre-restore.zip")] or items
+    items = [i for i in items if "-pre-restore" not in i["id"]] or items
     if not items:
         return {"last_backup_at": None, "age_hours": None, "stale": True}
     last = max(items, key=lambda i: i["created_at"])
