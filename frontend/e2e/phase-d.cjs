@@ -45,7 +45,7 @@ const IBAN = "DE89370400440532013000";
   await p.screenshot({ path: "/tmp/shots/d-finanzen.png", fullPage: true });
   // --- Mahnwesen ---
   await p.goto(base + "/mahnwesen"); await p.waitForSelector("td:has-text('Mahnung fällig')");
-  await p.click("text=/Entwürfe vorbereiten/"); await p.waitForSelector("text=Entwurf/Entwürfe angelegt");
+  await p.click("text=/als Entwurf vorbereiten/"); await p.waitForSelector("text=Entwurf/Entwürfe angelegt");
   await p.click("button:has-text('Öffnen')"); await p.waitForSelector("textarea");
   console.log("Hinweis:", (await p.textContent(".modal .alert.warn")).slice(0, 80));
   await p.click("text=Geprüft – freigeben"); await p.waitForSelector(".modal .alert.err"); console.log("Freigabe ohne Frist:", await p.textContent(".modal .alert.err")); ok("Freigabe mit offenem Platzhalter blockiert");

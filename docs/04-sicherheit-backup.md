@@ -39,7 +39,7 @@ Ablauf:
 4. **Automatik:** Zeitplan (täglich) – im Desktop-Betrieb beim App-Start geprüft („letztes Backup älter als N Stunden → Backup“), kein Hintergrunddienst nötig. Der geplante Dienst ist in Phase F zu bewerten; „zuverlässig umsetzbar“ ist auf einem Desktop nur beim laufenden Programm gewährleistet.
 5. **Statusanzeige:** Zeitpunkt des letzten erfolgreichen Backups, Ergebnis der Prüfung, Warnung bei Alter > Schwelle.
 
-Nicht implementiert (offen): Verschlüsselung der Backups, Aufbewahrungsrotation, externes Ziel. Der Wiederherstellungs-Austausch der laufenden DB erfordert in Phase B einen Neustart der Anwendung.
+Nicht implementiert (offen): Aufbewahrungsrotation, externes Ziel. Der Wiederherstellungs-Austausch der laufenden DB erfordert in Phase B einen Neustart der Anwendung.
 
 ## 4. Export/Migration (Serverumzug)
 Geplant Phase F: Logischer Export (JSON/CSV je Tabelle + Dokumentenarchiv mit Manifest) und Import über ORM in PostgreSQL. Alembic-Schema-Revision im Manifest verhindert Import in falsche Schemastände.
@@ -51,3 +51,20 @@ Geplant Phase F: Logischer Export (JSON/CSV je Tabelle + Dokumentenarchiv mit Ma
 * **Dokumente:** Download nur authentifiziert (`Content-Disposition: attachment`, `nosniff`); Typ/Größe/Magic-Bytes-Prüfung; zufällige Speicherschlüssel. Dokumente sind im Backup enthalten (bestehender Backup-Mechanismus).
 * **Unveränderlichkeit:** Zahlungen, Zuordnungen, Kautionsbuchungen sind append-only/Storno; Audit für jeden Schritt. Schutz auf Anwendungsebene, nicht auf Datenbankebene.
 * Mahnwesen: Es existiert kein Versandcode (E-Mail/Post).
+
+
+## Ergänzung Master-Review (Stand dieses Berichts)
+**Was verschlüsselt ist – und was nicht (ehrlich):**
+| Objekt | Verschlüsselt? |
+|---|---|
+| Backup-Archiv, wenn mit Passphrase erstellt (`.zip.enc`) | **Ja** – AES-256-GCM, Schlüssel per scrypt aus der Passphrase; Passphrase (mind. 12 Zeichen) wird nicht gespeichert; falsche Passphrase/Manipulation → Entschlüsselung scheitert |
+| Backup-Archiv ohne Passphrase | Nein |
+| Laufende SQLite-Datenbank | **Nein** |
+| Dokumente im Datenordner | **Nein** |
+Schutz der laufenden Daten ist **nur** über BitLocker/Geräteverschlüsselung und das Windows-Benutzerkonto möglich. Die Anwendung darf daher nicht als „verschlüsselte Datenhaltung“ beschrieben werden.
+
+**HTTP-Sicherheitsheader** (Test `test_l_security_backup.py`): `Content-Security-Policy` (nur eigene Ressourcen), `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store` für API-Antworten.
+**Dokumentintegrität:** SHA-256 beim Speichern; Download und `POST /documents/{id}/verify` prüfen die Datei (409 `file_corrupt` / 404 `file_missing`, Audit-Eintrag). Endgültige Entfernung (`purge`) nur Administrator und erst nach Ablauf der Aufbewahrungsfrist (Einstellung `document_retention_days`, Standard 3650 Tage – **Annahme, nicht rechtlich geprüft**).
+**Datenprüfung:** `GET /system/integrity` (Oberfläche: Einstellungen → Datenprüfung) meldet verwaiste Verknüpfungen, doppelte Vermietungseinheiten, überlappende Untermietverträge, Überbelegung und beschädigte Dokumente. Es verändert nichts.
+**Restore-Drill:** automatisierter Test (Backup → Änderung → Wiederherstellung inkl. Dokumente → Neustart) sowie E2E-Ablauf 15 über die Oberfläche.
+**Abhängigkeitsprüfung:** `npm audit` (Stand dieses Berichts): Produktivabhängigkeiten 2 Meldungen mittlerer Schwere (react-router); weitere 6 betreffen nur Entwicklungswerkzeuge (vitest/esbuild/tinypool). Es wurde bewusst **kein** `npm audit fix --force` ausgeführt (Major-Upgrades ungetestet). Für Python wurde kein Audit-Werkzeug ausgeführt (`pip-audit` nicht installiert) – **nicht geprüft**.

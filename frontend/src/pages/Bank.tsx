@@ -12,7 +12,7 @@ interface Preview { errors: { row: number; message: string }[]; total_rows: numb
 export function SuggestionRow({ t, onDone }: { t: Txn; onDone: () => void }) {
   const { ask } = useDialogs();
   const [err, setErr] = useState("");
-  async function confirm(s: Sugg) {
+  async function confirmSuggestion(s: Sugg) {
     setErr("");
     try {
       const body = s.kind === "deposit" ? { confirm: true, kind: "deposit", deposit_id: s.deposit_id, deposit_kind: s.deposit_kind } : { confirm: true, allocations: (s.allocations ?? []).map((a) => ({ ...(a.charge_id ? { charge_id: a.charge_id } : {}), ...(a.invoice_id ? { invoice_id: a.invoice_id } : {}), amount: a.amount })), lease_id: s.lease_id };
@@ -25,7 +25,7 @@ export function SuggestionRow({ t, onDone }: { t: Txn; onDone: () => void }) {
       <td>{t.status === "open" ? (t.suggestions?.length ? t.suggestions.map((s, i) => (
         <div key={i} style={{ marginBottom: 8 }}><Badge tone="ok">Vorschlag ({s.score})</Badge> {s.kind === "charges" ? `${s.lease_label ?? `Vertrag #${s.lease_id}`}: ${s.allocations?.length} Sollstellung(en)` : s.kind === "invoice" ? `Rechnung ${s.invoice_label ?? `#${s.invoice_id}`}` : `Kaution #${s.deposit_id}`}
           <div className="muted">{s.reasons.join("; ")}{s.unallocated_remainder && s.unallocated_remainder !== "0.00" ? ` · Rest ${eur(s.unallocated_remainder)} bleibt unzugeordnet` : ""}</div>
-          <button className="btn small primary" onClick={() => confirm(s)}>Zuordnung bestätigen</button></div>)) : <Badge tone="err">Nicht zuordenbar – manuell prüfen</Badge>) : <Badge tone={t.status === "confirmed" ? "ok" : "warn"}>{t.status === "confirmed" ? "Bestätigt" : `Ausgeblendet: ${t.ignore_reason}`}</Badge>}
+          <button className="btn small primary" onClick={() => confirmSuggestion(s)}>Zuordnung bestätigen</button></div>)) : <Badge tone="err">Nicht zuordenbar – manuell prüfen</Badge>) : <Badge tone={t.status === "confirmed" ? "ok" : "warn"}>{t.status === "confirmed" ? "Bestätigt" : `Ausgeblendet: ${t.ignore_reason}`}</Badge>}
         {err && <div className="alert err">{err}</div>}</td>
       <td>{t.status === "open" && <button className="btn small" onClick={async () => { const r = await ask("Begründung (z. B. Privatbuchung)", { title: "Buchung ausblenden" }); if (r) { await api(`/bank/transactions/${t.id}/ignore`, { method: "POST", json: { reason: r } }); onDone(); } }}>Ausblenden</button>}
         {t.status !== "open" && <button className="btn small" onClick={async () => { const r = await ask("Begründung für die Wiedereröffnung", { title: "Buchung wieder öffnen" }); if (r) { await api(`/bank/transactions/${t.id}/reopen`, { method: "POST", json: { reason: r } }); onDone(); } }}>Wieder öffnen</button>}</td>

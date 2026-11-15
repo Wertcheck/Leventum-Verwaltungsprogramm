@@ -63,3 +63,20 @@ Geldbeträge und Flächen sind JSON-Strings mit 2 Nachkommastellen. Validierungs
 | Übergabeprotokolle | `GET/POST /handover-protocols` |
 | Historie | `GET /history?entity_type&entity_id` |
 | Dokumente | `GET /documents/search`, `POST /documents/{id}/links`, `POST /documents/{id}/delete` (Weichlöschung), `GET /leases/{id}/missing-documents` |
+
+## Ergänzung Master-Review (neue/geänderte Endpunkte)
+| Endpunkt | Zweck |
+|---|---|
+| `POST /charges/preview` | Vorschau (Dry-Run) der Sollstellungs-Erzeugung: `would_create`, `skipped_existing`, `conflicts` (`amount_differs`, `period_overlap`), `errors`, `notes`, `backdated_count`; schreibt nichts |
+| `POST /charges/generate` | Erzeugt Sollstellungen; rückwirkende Perioden nur mit `allow_backdated: true`, sonst 409 `backdated_confirmation_required`; Rhythmen `monthly/quarterly/half_yearly/yearly`, `on_demand` erzeugt nichts |
+| `GET /tenants` | gebündelt, paginiert (`items,total,limit,offset`); `lease_status` = Phase `upcoming/active/notice/ended/draft/no_lease`, `lease_raw_status` = gespeicherter Status |
+| `GET /tenants/{id}/overview` | eine Abfrage für das Detailpanel (Verträge, Soll/Offen, Zahlungen, Kaution, Dokumente, Aufgaben, Reparaturen, Aktivität) |
+| `PATCH /rooms/{id}`, `/beds/{id}`, `/units/{id}`, `/leases/{id}`, `/parties/{id}`, `/properties/{id}` | Bearbeiten mit Audit Vorher/Nachher (IBAN/Geburtsdatum maskiert); `warnings`/`impact` bei Folgen (Fläche, Vertragsende) |
+| `POST /leases/{id}/terms` | neue Konditionsversion (Historie bleibt, keine stille Rückwirkung) |
+| `GET /dunning/overdue` | zusätzlich `summary.by_state` (due, draft_exists, approved_not_sent, waiting, max_level_reached), `charge_label`, `period_start/end` |
+| `GET /economics` | zusätzlich `datenstand`, `offen_zum_stichtag.{as_of,is_forecast}`, `prognose_periodenende` (nur gekennzeichnete Prognose) |
+| `GET /dashboard` | KPI-Felder `definition` und `hint`; „aktiver Mieter“ = Partei mit mind. einem laufenden Untermietvertrag als Mieter/Mitmieter (gekündigte, noch laufende Verträge zählen) |
+| `POST /documents/{id}/verify`, `/documents/verify-all`, `POST /documents/{id}/purge` | Integritätsprüfung; endgültige Entfernung nur Admin nach Aufbewahrungsfrist |
+| `GET /system/integrity` | Datenprüfung (siehe 04) |
+| `POST /system/backups` `{passphrase?}`, `…/verify`, `…/restore` `{confirm, passphrase?}` | optional verschlüsselte Backups (AES-256-GCM) |
+| `GET/POST /utility-statements…` | Betriebskosten Ebene A inkl. `allocation` (bei Status „geprüft“ eingefroren) und `comparison` (Ebene B) – jetzt auch über die Oberfläche (`/betriebskosten`) |
