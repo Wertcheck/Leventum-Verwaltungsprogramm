@@ -177,20 +177,21 @@ def ensure_rentable_unit(db: Session, actor_id: int | None, *, property_id: int,
         if unit.property_id != prop.id:
             raise ServiceError("invalid", "Wohneinheit gehört nicht zum angegebenen Objekt.")
     level = "bed" if bed else "room" if room else "unit" if unit else "property"
-    existing = db.scalar(select(RentableUnit).where(
-        RentableUnit.property_id == property_id, RentableUnit.level == level,
-        RentableUnit.unit_id.is_(None) if unit_id is None else RentableUnit.unit_id == unit_id,
-        RentableUnit.room_id.is_(None) if room_id is None else RentableUnit.room_id == room_id,
-        RentableUnit.bed_id.is_(None) if bed_id is None else RentableUnit.bed_id == bed_id))
+    key = space_key_for(property_id, unit_id, room_id, bed.id if bed else None)
+    existing = db.scalar(select(RentableUnit).where(RentableUnit.space_key == key))
     if existing:
         return existing
     ru = RentableUnit(level=level, property_id=property_id, unit_id=unit_id, room_id=room_id,
-                      bed_id=bed.id if bed else None, name=name)
+                      bed_id=bed.id if bed else None, name=name, space_key=key)
     db.add(ru)
     db.flush()
     audit.record(db, "rentable_unit.created", actor_user_id=actor_id, entity_type="rentable_unit", entity_id=ru.id,
                  summary=f"Vermietungseinheit angelegt ({level})")
     return ru
+
+
+def space_key_for(property_id: int, unit_id: int | None, room_id: int | None, bed_id: int | None) -> str:
+    return "/".join([f"P{property_id}"] + [f"{t}{v}" for t, v in (("U", unit_id), ("R", room_id), ("B", bed_id)) if v is not None])
 
 
 def chain(ru: RentableUnit) -> tuple:

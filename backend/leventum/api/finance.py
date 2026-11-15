@@ -171,8 +171,12 @@ def documents_download(did: int, db: Session = Depends(get_db), settings: Settin
     if d.deleted_at:
         raise ServiceError("deleted", "Das Dokument wurde gelöscht.", 404)
     store = _store(settings)
-    if not store.exists(d.storage_key):
-        raise ServiceError("file_missing", "Die Datei fehlt im Dokumentenspeicher.", 404)
+    res = DOC.verify(store, d)  # vor jedem Download: Datei vorhanden, lesbar, unverändert?
+    if not res["ok"]:
+        from leventum.services import audit
+        audit.record(db, "document.integrity_failed", actor_user_id=None, entity_type="document", entity_id=d.id, summary=f"Dokument-Integrität verletzt: {res['problem']}", details={"problem": res["problem"]})
+        db.commit()
+        raise ServiceError("file_missing" if res["problem"] in ("missing", "unreadable") else "file_corrupt", res["message"], 404 if res["problem"] == "missing" else 409)
     safe = d.original_name.replace('"', "")
     return StreamingResponse(store.open(d.storage_key), media_type=d.mime, headers={"Content-Disposition": f'attachment; filename="{safe}"', "X-Content-Type-Options": "nosniff"})
 
@@ -232,7 +236,7 @@ def notice_out(n: DunningNotice, full: bool = True) -> dict:
 def dunning_overdue(as_of: date | None = None, grace_days: int = Query(0, ge=0, le=60), db: Session = Depends(get_db)):
     items = DN.candidates(db, as_of, grace_days)
     labels = {i["lease_id"]: M.lease_title(db, db.get(Lease, i["lease_id"])) for i in items}
-    return {"items": js([{**i, "lease_label": labels[i["lease_id"]]} for i in items]), "min_days_between_levels": DN.MIN_DAYS_BETWEEN_LEVELS,
+    return {"items": js([{**i, "lease_label": labels[i["lease_id"]]} for i in items]), "summary": js(DN.summarize(items)), "min_days_between_levels": DN.MIN_DAYS_BETWEEN_LEVELS,
             "note": "Gebühren und Verzugszinsen werden nicht berechnet. Es erfolgt kein automatischer Versand."}
 
 

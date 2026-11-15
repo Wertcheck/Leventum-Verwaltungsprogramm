@@ -314,3 +314,34 @@ def test_period_must_be_whole_months(w):
 def test_empty_database_reports_zero_without_errors(w):
     r = rep(w)
     assert r["soll"]["sub_total"] == D("0.00") and r["vacancy"]["physical_vacancy_rate_by_count"] is None
+
+
+# ---- Datenstand vs. Prognose (Befund B7 der Master-Review) ---------------------------------------------------------------------------------
+def test_open_items_use_data_stand_not_future_period_end_and_forecast_is_separate(w):
+    p, a, b, main = two_units(w)
+    sub = sub_on(w, [ru(w, p, a)], "1150.00", "220.00")
+    from leventum.models import Charge as Ch
+    # zwei Sollstellungen im Zeitraum: eine fällig am 1., eine erst am 20. (Zukunft relativ zum Datenstand 15.)
+    w.db.add(Ch(lease_id=sub.id, direction="receivable", charge_type="base_rent", period_start=date(2026, 1, 1), period_end=date(2026, 1, 31), due_date=date(2026, 1, 1), amount=D("1150.00"), dedupe_key="k1"))
+    w.db.add(Ch(lease_id=sub.id, direction="receivable", charge_type="other", period_start=date(2026, 1, 1), period_end=date(2026, 1, 31), due_date=date(2026, 1, 20), amount=D("100.00"), source="manual", note="Sonderposten"))
+    w.db.flush()
+    r = E.Engine(w.db, *JAN, today=date(2026, 1, 15)).report("portfolio")
+    assert r["datenstand"]["data_as_of"] == date(2026, 1, 15) and r["datenstand"]["period_extends_beyond_data_stand"] is True
+    o = r["offen_zum_stichtag"]
+    assert (o["as_of"], o["is_forecast"], o["receivables"], o["receivables_overdue"]) == (date(2026, 1, 15), False, D("1150.00"), D("1150.00"))  # die erst am 20. fällige Forderung ist noch nicht offen/überfällig
+    f = r["prognose_periodenende"]
+    assert f["is_forecast"] is True and f["as_of"] == date(2026, 1, 31) and "PROGNOSE" in f["label"]
+    assert (f["receivables_open_if_no_further_payments"], f["receivables_overdue_if_no_further_payments"]) == (D("1250.00"), D("1250.00"))
+    assert any(x["code"] == "period_beyond_data_stand" for x in r["warnings"])
+    # Soll bleibt der vertragliche Planwert des ganzen Monats (nicht gekürzt)
+    assert r["soll"]["sub_rent"] == D("1150.00")
+
+
+def test_closed_period_has_no_forecast_and_data_stand_equals_period_end(w):
+    p, a, b, main = two_units(w)
+    sub_on(w, [ru(w, p, a)], "1150.00", "220.00")
+    r = E.Engine(w.db, *JAN, today=date(2026, 3, 1)).report("portfolio")
+    assert r["prognose_periodenende"] is None and r["datenstand"]["data_as_of"] == date(2026, 1, 31) and r["datenstand"]["period_extends_beyond_data_stand"] is False
+    assert not any(x["code"] == "period_beyond_data_stand" for x in r["warnings"])
+    fut = E.Engine(w.db, date(2027, 1, 1), date(2027, 1, 31), today=date(2026, 3, 1)).report("portfolio")  # reiner Planzeitraum
+    assert fut["ist"]["in_total"] == D("0.00") and fut["offen_zum_stichtag"]["receivables"] == D("0.00") and fut["prognose_periodenende"]["is_forecast"] is True

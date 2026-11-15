@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     min_password_length: int = 12
     max_upload_bytes: int = 25 * 1024 * 1024
     backup_max_age_hours: int = 72
+    document_retention_days: int = 3650  # Annahme (nicht rechtlich geprüft): endgültige Löschung frühestens 10 Jahre nach dem Upload
     cookie_secure: bool = False  # True bei HTTPS-Serverbetrieb
 
     @property

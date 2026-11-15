@@ -123,7 +123,14 @@ def properties_get(property_id: int, db: Session = Depends(get_db)):
             rooms.append({**ser(r), "beds": [ser(b) for b in db.scalars(select(Bed).where(Bed.room_id == r.id).order_by(Bed.label))]})
         tree.append({**ser(u), "rooms": rooms})
     rus = [{**ser(r), "label": M.space_label(db, r)} for r in db.scalars(select(RentableUnit).where(RentableUnit.property_id == p.id))]
-    return {**ser(p), "units": tree, "rentable_units": rus}
+    n_rooms = sum(len(u["rooms"]) for u in tree)
+    n_beds = sum(len(r["beds"]) for u in tree for r in u["rooms"])
+    made = {lvl: sum(1 for r in rus if r["level"] == lvl) for lvl in ("property", "unit", "room", "bed")}
+    # Zusammenfassung: vorhandene Einheiten vs. als Vermietungseinheit angelegte (ein Zimmer ist ein Raum; erst die Vermietungseinheit macht es vermietbar)
+    summary = {"units": len(tree), "rooms": n_rooms, "beds": n_beds,
+               "rentable": {"property": {"created": made["property"], "possible": 1}, "unit": {"created": made["unit"], "possible": len(tree)},
+                            "room": {"created": made["room"], "possible": n_rooms}, "bed": {"created": made["bed"], "possible": n_beds}}}
+    return {**ser(p), "units": tree, "rentable_units": rus, "summary": summary}
 
 
 @router.patch("/properties/{property_id}", dependencies=[W])
@@ -346,10 +353,10 @@ def tenants(status: str | None = None, property_id: int | None = None, q: str | 
             props = {i.rentable_unit.property_id for i in lease.items}
             if property_id and property_id not in props:
                 continue
-            ui = {"active": ("active",), "terminated": ("terminated",), "ended": ("ended",), "draft": ("draft",)}.get(status or "")
-            if status and status != "arrears" and lease.status not in (ui or ()):
+            ph = L.phase(lease, today)
+            if status and status != "arrears" and ph != {"terminated": "notice"}.get(status, status):
                 continue
-            rows.append({"party_id": p.id, "name": p.display_name, "lease_id": lease.id, "lease_status": lease.status,
+            rows.append({"party_id": p.id, "name": p.display_name, "lease_id": lease.id, "lease_status": ph, "lease_raw_status": lease.status,
                          "spaces": [M.space_label(db, i.rentable_unit) for i in lease.items], "start_date": js(lease.start_date),
                          "end_date": js(L.effective_end(lease)), "monthly_total": js(L.monthly_total(lease, max(today, lease.start_date))),
                          "payment_status": arrears["status"], "overdue_amount": js(arrears["amount"]), "last_activity": js(last)})

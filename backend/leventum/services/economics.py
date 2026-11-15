@@ -120,9 +120,12 @@ def validate_period(start: date, end: date):
 
 
 class Engine:
-    def __init__(self, db: Session, start: date, end: date):
+    def __init__(self, db: Session, start: date, end: date, today: date | None = None):
         validate_period(start, end)
         self.db, self.start, self.end = db, start, end
+        self.today = today or date.today()
+        # DATENSTAND: Ist-/Offen-Werte gelten höchstens bis heute. Ein Periodenende in der Zukunft ist KEIN Ist-Stichtag, sondern Prognose.
+        self.data_as_of = min(end, self.today)
         self.s = Structure(db)
         self.leases = list(db.scalars(select(Lease).where(Lease.status.in_(BILLABLE_STATUS)).order_by(Lease.id)))
         self.custom = defaultdict(dict)
@@ -137,7 +140,9 @@ class Engine:
         self._soll()
         self._objects_and_other_charges()
         self._ist()
-        self._open()
+        self._open(self.data_as_of)
+        if self.end > self.today:
+            self._open(self.end, "fc_")   # Prognose zum Periodenende (ohne weitere Zahlungen)
         self._vacancy()
 
     # -- Verteilung --
@@ -244,21 +249,21 @@ class Engine:
                 (self.prop[p.property_id] if p.property_id else self.port)[metric] += rest
 
     # -- Offen (Stichtag = Periodenende) --
-    def _open(self):
-        as_of = self.end
+    def _open(self, as_of: date, prefix: str = ""):
+        """Offene Posten zum Stichtag `as_of` (Fälligkeit ≤ Stichtag; überfällig = Fälligkeit < Stichtag; Zahlungen bis einschließlich Stichtag)."""
         for c in self.db.scalars(select(Charge).where(Charge.voided_at.is_(None), Charge.due_date <= as_of)):
             o = open_amount(self.db, c, as_of)
             if o <= 0:
                 continue
             lease = self.db.get(Lease, c.lease_id)
             base = "receivables" if c.direction == "receivable" else "payables"
-            self._add(lease, f"open_{base}", o)
+            self._add(lease, f"{prefix}open_{base}", o)
             if c.due_date < as_of:
-                self._add(lease, f"overdue_{base}", o)
+                self._add(lease, f"{prefix}overdue_{base}", o)
         for inv in self.db.scalars(select(Invoice).where(Invoice.voided_at.is_(None), Invoice.invoice_date <= as_of)):
             o = q(inv.amount - pay.invoice_allocated(self.db, inv.id, as_of))
             if o > 0:
-                self._attach_invoice(inv, "open_invoices", o)
+                self._attach_invoice(inv, f"{prefix}open_invoices", o)
 
     # -- Leerstand --
     def _vacancy(self):
@@ -340,6 +345,10 @@ class Engine:
         warnings = list(self.warnings)
         if scope in ("unit", "rentable_unit"):
             warnings.append({"code": "object_level_costs_excluded", "message": "Objektweite Kosten ohne Wohneinheiten-Bezug, nicht verteilte Hauptmieten und Nebenkosten-Abrechnungssalden sind in Wohneinheiten-/Vermietungseinheiten-Auswertungen nicht enthalten."})
+        beyond = self.end > self.today
+        if beyond:
+            warnings.append({"code": "period_beyond_data_stand", "message": f"Der Zeitraum reicht über den Datenstand ({self.today:%d.%m.%Y}) hinaus: Das Soll enthält vertragliche Planwerte bis zum Periodenende, "
+                             "Ist und offene Posten enthalten nur Buchungen bis zum Datenstand. Die Werte „Prognose Periodenende“ sind Hochrechnungen ohne weitere Zahlungen."})
         if g("ist_in_other") or g("ist_out_other"):
             warnings.append({"code": "unallocated_payments", "message": "Es gibt Zahlungen ohne Zuordnung zu Sollstellungen/Rechnungen; sie sind nur im Ist-Gesamtergebnis enthalten."})
         return {
@@ -349,8 +358,13 @@ class Engine:
                      "object_costs": obj},
             "ist": {"in_from_subleases": g("ist_in_receivables"), "in_other_unallocated": g("ist_in_other"), "in_total": q(ist_in),
                     "out_main_rent": g("ist_out_payables"), "out_invoices": g("ist_out_invoices"), "out_other_unallocated": g("ist_out_other"), "out_total": q(ist_out)},
-            "offen_zum_stichtag": {"as_of": self.end, "receivables": g("open_receivables"), "receivables_overdue": g("overdue_receivables"),
+            "datenstand": {"today": self.today, "data_as_of": self.data_as_of, "period_extends_beyond_data_stand": beyond,
+                           "note": "Ist und offene Posten gelten bis zum Datenstand; das Soll ist vertraglicher Planwert für den gesamten Zeitraum."},
+            "offen_zum_stichtag": {"as_of": self.data_as_of, "is_forecast": False, "receivables": g("open_receivables"), "receivables_overdue": g("overdue_receivables"),
                                    "payables": g("open_payables"), "payables_overdue": g("overdue_payables"), "invoices": g("open_invoices")},
+            "prognose_periodenende": ({"label": "PROGNOSE – keine Ist-Werte", "as_of": self.end, "is_forecast": True, "receivables_open_if_no_further_payments": g("fc_open_receivables"),
+                                       "receivables_overdue_if_no_further_payments": g("fc_overdue_receivables"), "payables_open_if_no_further_payments": g("fc_open_payables"),
+                                       "invoices_open_if_no_further_payments": g("fc_open_invoices")} if beyond else None),
             "vacancy": {"economic_vacancy_cost": g("vacancy_cost"), "note": "Teil der Hauptmietkosten (nicht zusätzlich abgezogen)",
                         "physical_vacancy_rate_by_count": (q(tot.get("phys_days_vacant", ZERO) * 100 / pdays) if pdays else None),
                         "physical_vacancy_rate_by_weight": (q(tot.get("phys_wdays_vacant", ZERO) * 100 / tot["phys_wdays_total"]) if tot.get("phys_wdays_total") else None)},

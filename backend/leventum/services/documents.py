@@ -105,3 +105,61 @@ def missing_for_lease(db: Session, lease) -> list[str]:
     if db.scalar(select(HandoverProtocol.id).where(HandoverProtocol.lease_id == lease.id, HandoverProtocol.kind == "move_in")) is not None:
         have.add("uebergabeprotokoll")
     return [t for t in domain.REQUIRED_DOCS.get(lease.kind, ()) if t not in have]
+
+
+def verify(store: FileStore, doc: Document) -> dict:
+    """Prüft, ob die Datei tatsächlich vorhanden, lesbar und unverändert ist (Größe + SHA-256)."""
+    import hashlib
+    if doc.purged_at:
+        return {"ok": False, "problem": "purged", "message": "Die Datei wurde endgültig entfernt."}
+    if not store.exists(doc.storage_key):
+        return {"ok": False, "problem": "missing", "message": "Die Datei fehlt im Dokumentenspeicher."}
+    h, size = hashlib.sha256(), 0
+    try:
+        with store.open(doc.storage_key) as fh:
+            while chunk := fh.read(1024 * 256):
+                h.update(chunk)
+                size += len(chunk)
+    except OSError as e:
+        return {"ok": False, "problem": "unreadable", "message": f"Die Datei ist nicht lesbar: {e}"}
+    if size != doc.size:
+        return {"ok": False, "problem": "size_mismatch", "message": f"Dateigröße weicht ab (gespeichert {doc.size}, tatsächlich {size})."}
+    if h.hexdigest() != doc.sha256:
+        return {"ok": False, "problem": "hash_mismatch", "message": "Die Prüfsumme stimmt nicht – die Datei wurde verändert oder ist beschädigt."}
+    return {"ok": True, "problem": None, "message": "Datei vorhanden und unverändert."}
+
+
+def verify_all(db: Session, store: FileStore) -> list[dict]:
+    """Alle nicht gelöschten Dokumente prüfen; liefert nur die Auffälligkeiten."""
+    out = []
+    for d in db.scalars(select(Document).where(Document.deleted_at.is_(None))):
+        r = verify(store, d)
+        if not r["ok"]:
+            out.append({"document_id": d.id, "original_name": d.original_name, **r})
+    return out
+
+
+def purge(db: Session, store: FileStore, actor_id: int | None, document_id: int, reason: str, retention_days: int, today=None) -> Document:
+    """Endgültige Entfernung der Datei. Nur für bereits (weich) gelöschte Dokumente, nur nach Ablauf der Aufbewahrungsfrist (ab Upload),
+    mit Begründung. Metadaten und Prüfsumme bleiben zum Nachweis erhalten."""
+    from datetime import date, datetime, timezone
+    doc = db.get(Document, document_id)
+    if doc is None:
+        raise NotFound("Dokument")
+    if doc.purged_at:
+        raise ServiceError("already_purged", "Die Datei wurde bereits endgültig entfernt.", 409)
+    if not doc.deleted_at:
+        raise ServiceError("not_deleted", "Nur bereits gelöschte Dokumente können endgültig entfernt werden (zuerst löschen).", 409)
+    if not reason.strip():
+        raise ServiceError("invalid", "Begründung erforderlich.")
+    today = today or date.today()
+    from leventum.db.engine import aware
+    due = aware(doc.uploaded_at).date().toordinal() + retention_days
+    if today.toordinal() < due:
+        raise ServiceError("retention_period", f"Aufbewahrungsfrist ({retention_days} Tage ab Upload) noch nicht abgelaufen; frühestens am {date.fromordinal(due):%d.%m.%Y} möglich.", 409)
+    store.delete(doc.storage_key)
+    doc.purged_at, doc.purged_by_user_id, doc.purge_reason = datetime.now(timezone.utc), actor_id, reason.strip()
+    audit.record(db, "document.purged", actor_user_id=actor_id, entity_type="document", entity_id=doc.id, summary=f"Datei endgültig entfernt: {doc.original_name}",
+                 details={"reason": reason, "sha256": doc.sha256, "retention_days": retention_days})
+    db.flush()
+    return doc

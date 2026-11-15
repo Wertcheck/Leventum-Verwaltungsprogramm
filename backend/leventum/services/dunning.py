@@ -46,18 +46,36 @@ def candidates(db: Session, as_of: date | None = None, grace_days: int = 0, leas
         state, level = "due", 1
         if last:
             lvl, status, sent_on, approved_at = last
-            if lvl >= 3:
-                state, level = "max_level_reached", 3
-            elif status == "draft":
-                state, level = "draft_exists", lvl
-            else:
-                ref = sent_on or (approved_at.date() if approved_at else as_of)
+            level = lvl
+            if status == "draft":
+                state = "draft_exists"
+            elif status == "approved":
+                state = "approved_not_sent"       # freigegeben, aber Versand noch nicht dokumentiert → keine Eskalation
+            elif lvl >= 3:
+                state = "max_level_reached"
+            else:                                  # nur eine als VERSANDT dokumentierte Stufe darf eskalieren
                 level = lvl + 1
-                state = "due" if (as_of - ref).days >= MIN_DAYS_BETWEEN_LEVELS else "waiting"
-        out.append({"charge_id": c.id, "lease_id": c.lease_id, "charge_type": c.charge_type, "due_date": c.due_date, "amount": c.amount,
+                state = "due" if (as_of - sent_on).days >= MIN_DAYS_BETWEEN_LEVELS else "waiting"
+        out.append({"charge_id": c.id, "lease_id": c.lease_id, "charge_type": c.charge_type, "charge_label": f"{CHARGE_LABEL.get(c.charge_type, c.charge_type)} {c.period_start:%m/%Y}",
+                    "period_start": c.period_start, "period_end": c.period_end, "due_date": c.due_date, "amount": c.amount,
                     "open_amount": open_, "days_overdue": (as_of - c.due_date).days, "last_level": last[0] if last else 0,
                     "proposed_level": level, "state": state})
     return out
+
+
+def summarize(items: list[dict]) -> dict:
+    """Konsistente Zähler für die Oberfläche: jede Position fällt in genau einen Zustand."""
+    states = ("due", "draft_exists", "approved_not_sent", "waiting", "max_level_reached")
+    out = {s: {"positions": 0, "leases": 0, "open_amount": Decimal("0.00")} for s in states}
+    leases: dict[str, set] = {s: set() for s in states}
+    for i in items:
+        o = out[i["state"]]
+        o["positions"] += 1
+        o["open_amount"] = q(o["open_amount"] + i["open_amount"])
+        leases[i["state"]].add(i["lease_id"])
+    for s_ in states:
+        out[s_]["leases"] = len(leases[s_])
+    return {"total_positions": len(items), "by_state": out}
 
 
 def _recipient(lease: Lease) -> str:

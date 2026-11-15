@@ -241,3 +241,37 @@ def documents_delete(did: int, body: S.VoidIn, db: Session = Depends(get_db), us
 @router.get("/leases/{lid}/missing-documents", dependencies=[MR])
 def lease_missing_docs(lid: int, db: Session = Depends(get_db)):
     return {"missing": DOC.missing_for_lease(db, get_or_404(db, Lease, lid, "Vertrag")), "note": "Pflichtliste ist eine organisatorische Annahme, keine Rechtsaussage."}
+
+
+# --- Dokument-Integrität / endgültige Entfernung / Datenintegrität -------------------------------------------------------------------------------
+@router.get("/documents/verify-all", dependencies=[Depends(require("system:backup"))])
+def documents_verify_all(db: Session = Depends(get_db), settings: Settings = Depends(get_settings)):
+    problems = DOC.verify_all(db, _store(settings))
+    return {"ok": not problems, "problems": problems}
+
+
+@router.get("/documents/{did}/verify", dependencies=[DR])
+def documents_verify(did: int, db: Session = Depends(get_db), settings: Settings = Depends(get_settings)):
+    return DOC.verify(_store(settings), get_or_404(db, Document, did, "Dokument"))
+
+
+class PurgeIn(S.In):
+    reason: str = S.Field(min_length=1)
+    confirm: bool
+
+
+@router.post("/documents/{did}/purge", dependencies=[Depends(require("document:purge"))])
+def documents_purge(did: int, body: PurgeIn, db: Session = Depends(get_db), user: AppUser = Depends(current_user), settings: Settings = Depends(get_settings)):
+    if not body.confirm:
+        raise ServiceError("confirmation_required", "Bestätigung erforderlich: Die Datei wird unwiderruflich entfernt.")
+    d = DOC.purge(db, _store(settings), user.id, did, body.reason, settings.document_retention_days)
+    db.commit()
+    return {**doc_out(d), "purged_at": js(d.purged_at)}
+
+
+@router.get("/system/integrity", dependencies=[Depends(require("system:backup"))])
+def system_integrity(db: Session = Depends(get_db), settings: Settings = Depends(get_settings)):
+    from leventum.services import integrity
+    r = integrity.check(db)
+    docs = DOC.verify_all(db, _store(settings))
+    return {**r, "documents": {"ok": not docs, "problems": docs}, "ok": r["ok"] and not docs}

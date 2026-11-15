@@ -131,6 +131,9 @@ class Document(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # Weichlöschung: Datei bleibt erhalten
     deleted_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("app_user.id"))
     delete_reason: Mapped[str | None] = mapped_column(Text)
+    purged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # endgültig entfernt (Datei gelöscht, Metadaten + Prüfsumme bleiben)
+    purged_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("app_user.id"))
+    purge_reason: Mapped[str | None] = mapped_column(Text)
     links: Mapped[list["DocumentLink"]] = relationship(cascade="all, delete-orphan")
 
 

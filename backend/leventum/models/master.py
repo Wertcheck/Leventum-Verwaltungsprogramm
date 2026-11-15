@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Boolean, CheckConstraint, Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from leventum.db.base import Area, Base, Money, utcnow
@@ -117,6 +117,8 @@ class RentableUnit(Base, Timestamps):
     room_id: Mapped[int | None] = mapped_column(ForeignKey("room.id"))
     bed_id: Mapped[int | None] = mapped_column(ForeignKey("bed.id"))
     name: Mapped[str | None] = mapped_column(String(200))
+    # Eindeutiger Raumschlüssel (z. B. "P1/U2/R3/B4"): ein UNIQUE über NULL-Spalten wirkt nicht, dieser Schlüssel verhindert Doppelungen portabel.
+    space_key: Mapped[str] = mapped_column(String(60), unique=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
@@ -263,6 +265,7 @@ class UtilityStatement(Base, Timestamps):
     prepayments_amount: Mapped[object | None] = mapped_column(Money)
     prepayments_source: Mapped[str | None] = mapped_column(String(20))
     notes: Mapped[str | None] = mapped_column(Text)
+    allocation_snapshot: Mapped[dict | None] = mapped_column(JSON)  # eingefrorene Verteilung (Flächen, Gewichte, Anteile) ab Status "reviewed"
     lines: Mapped[list["UtilityStatementLine"]] = relationship(cascade="all, delete-orphan", order_by="UtilityStatementLine.id")
     units: Mapped[list["UtilityStatementUnit"]] = relationship(cascade="all, delete-orphan")
 

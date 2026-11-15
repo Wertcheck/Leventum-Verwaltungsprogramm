@@ -51,8 +51,9 @@ def test_full_flow_over_http(auth_client):
     assert any(h["code"] == "legal_not_reviewed" for h in d["validation"]["hints"])
     # Mieterübersicht
     t = c.get(V + "/tenants").json()["items"]
-    assert t[0]["name"] == "Max Mustermann" and t[0]["lease_status"] == "active" and t[0]["payment_status"] == "current" and t[0]["overdue_amount"] == "0.00"  # keine Sollstellung überfällig
-    assert c.get(V + "/tenants?status=ended").json()["items"] == []
+    assert t[0]["name"] == "Max Mustermann" and t[0]["lease_raw_status"] == "active" and t[0]["lease_status"] == "ended" and t[0]["payment_status"] == "current" and t[0]["overdue_amount"] == "0.00"  # keine Sollstellung überfällig
+    # Der Vertrag endete am 31.07.2026 → zeitbezogene Phase "Beendet", obwohl der Rohstatus noch "active" ist (Befund B2)
+    assert [r["name"] for r in c.get(V + "/tenants?status=ended").json()["items"]] == ["Max Mustermann"] and c.get(V + "/tenants?status=active").json()["items"] == []
     # Wohneinheit gilt über Bettbelegung als belegt (Stichtag: heute liegt nach Vertragsende → vacant)
     u = c.get(V + "/units").json()["items"][0]
     assert u["occupancy_status"] in ("vacant", "occupied") and "living_area" in u and u["living_area"] == "78.50"

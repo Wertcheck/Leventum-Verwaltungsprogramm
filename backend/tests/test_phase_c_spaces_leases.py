@@ -41,8 +41,8 @@ def test_rentable_unit_rejects_inconsistent_hierarchy(w):
 def test_db_check_constraint_rejects_inconsistent_levels(w):
     w.db.commit()
     with pytest.raises(IntegrityError):
-        w.db.execute(text("INSERT INTO rentable_unit (level, property_id, unit_id, is_active, created_at, updated_at) "
-                          "VALUES ('room', 1, 1, 1, '2026-01-01', '2026-01-01')"))
+        w.db.execute(text("INSERT INTO rentable_unit (level, property_id, unit_id, space_key, is_active, created_at, updated_at) "
+                          "VALUES ('room', 1, 1, 'X', 1, '2026-01-01', '2026-01-01')"))
 
 
 def test_duplicate_unit_number_room_and_bed_rejected(w):
@@ -264,3 +264,12 @@ def test_terms_and_agreements_are_versioned_without_overwrite(w):
     with pytest.raises(ServiceError) as e:
         L.add_term(w.db, None, lease.id, valid_from=date(2025, 6, 1), valid_to=date(2025, 7, 1), base_rent=D("1.00"))
     assert e.value.code == "overlap"
+
+
+def test_space_key_is_unique_and_blocks_duplicates_at_database_level(w):
+    from sqlalchemy.exc import IntegrityError
+    ru = w.ru_unit(w.we1)
+    assert ru.space_key == f"P{w.prop.id}/U{w.we1.id}" and w.ru_unit(w.we1).id == ru.id and w.ru_bed(w.bed1).space_key.endswith(f"/R{w.room1.id}/B{w.bed1.id}")
+    w.db.add(RentableUnit(level="unit", property_id=w.prop.id, unit_id=w.we1.id, space_key=ru.space_key))  # am Service vorbei
+    with pytest.raises(IntegrityError):
+        w.db.flush()

@@ -106,7 +106,7 @@ def test_level_progression_waiting_period_and_max_level(w):
     d0 = date(2026, 2, 10)
     n1 = fix(DN.prepare_notices(w.db, None, as_of=d0)[0])
     DN.approve(w.db, None, n1.id)
-    assert {c["state"] for c in DN.candidates(w.db, d0)} == {"waiting"}  # freigegeben, aber noch nicht als versandt dokumentiert/Abstand
+    assert {c["state"] for c in DN.candidates(w.db, d0)} == {"approved_not_sent"}  # freigegeben, aber Versand nicht dokumentiert
     assert DN.prepare_notices(w.db, None, as_of=d0) == []
     DN.mark_sent(w.db, None, n1.id, sent_on=d0, via="E-Mail")
     assert {c["state"] for c in DN.candidates(w.db, d0 + timedelta(days=3))} == {"waiting"}
@@ -139,3 +139,28 @@ def test_partial_payment_changes_only_remaining_amount_in_next_draft(w):
     n = DN.prepare_notices(w.db, None, as_of=date(2026, 2, 10))[0]
     line = next(l for l in n.lines if l.charge_id == rec(w).id)
     assert line.open_amount == D("150.00") and n.total_open == D("1740.00")
+
+
+def test_regression_approved_but_unsent_notice_never_escalates(w):
+    """Befund aus der Master-Review: Eine nur freigegebene Stufe-1-Erinnerung führte nach 7 Tagen zu einem Stufe-2-Entwurf."""
+    n = fix(DN.prepare_notices(w.db, None, as_of=date(2026, 2, 10))[0])
+    DN.approve(w.db, None, n.id)
+    for later in (date(2026, 2, 20), date(2026, 3, 30), date(2027, 6, 1)):
+        assert {(c["state"], c["proposed_level"]) for c in DN.candidates(w.db, later)} == {("approved_not_sent", 1)}
+        assert DN.prepare_notices(w.db, None, as_of=later) == []
+    DN.mark_sent(w.db, None, n.id, sent_on=date(2026, 2, 11), via="Brief")
+    assert {(c["state"], c["proposed_level"]) for c in DN.candidates(w.db, date(2026, 2, 20))} == {("due", 2)}  # erst NACH dokumentiertem Versand
+
+
+def test_summary_counts_are_consistent_with_states_and_positions_are_identifiable(w):
+    cands = DN.candidates(w.db, date(2026, 2, 10))
+    assert all({"charge_id", "charge_label", "period_start", "period_end", "charge_type", "due_date"} <= c.keys() for c in cands)
+    labels = {(c["lease_id"], c["due_date"], c["charge_label"]) for c in cands}
+    assert len(labels) == len(cands) == 4  # Kaltmiete und NK am selben Fälligkeitstag sind unterscheidbar
+    sm = DN.summarize(cands)
+    assert sm["total_positions"] == 4 and sm["by_state"]["due"]["positions"] == 4 and sm["by_state"]["draft_exists"]["positions"] == 0
+    DN.prepare_notices(w.db, None, as_of=date(2026, 2, 10))
+    sm = DN.summarize(DN.candidates(w.db, date(2026, 2, 10)))
+    assert sm["by_state"]["due"]["positions"] == 0 and sm["by_state"]["draft_exists"]["positions"] == 4  # Entwürfe werden nicht erneut als neu vorbereitbar gezählt
+    assert sum(v["positions"] for v in sm["by_state"].values()) == sm["total_positions"]
+    assert sm["by_state"]["draft_exists"]["open_amount"] == D("2740.00") and sm["by_state"]["draft_exists"]["leases"] == 1

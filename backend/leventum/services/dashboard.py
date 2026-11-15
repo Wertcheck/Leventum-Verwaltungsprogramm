@@ -31,16 +31,15 @@ from sqlalchemy import distinct, func, select
 
 from leventum import domain
 from leventum.models import Lease, LeaseParty, Property, Unit
-from leventum.services.leases import OPEN_END, effective_end
+from leventum.services.leases import effective_end, is_running, phase
 
 
 def _running(db, kind):
-    today = date.today()
-    return [x for x in db.scalars(select(Lease).where(Lease.kind == kind, Lease.status.in_(domain.RUNNING_STATUS)))
-            if x.start_date <= today <= (effective_end(x) or OPEN_END)]
+    return [x for x in db.scalars(select(Lease).where(Lease.kind == kind, Lease.status.in_(domain.RUNNING_STATUS))) if is_running(x)]
 
 
 def _active_tenants(db):
+    """Aktiver Mieter = Person/Firma mit mindestens einem LAUFENDEN Untermietvertrag als Mieter/Mitmieter (Bewohner, Bürgen und Personen ohne Vertrag zählen nicht)."""
     ids = {p.party_id for lease in _running(db, "sub") for p in lease.parties if p.role in ("lessee", "co_lessee")}
     return len(ids)
 
@@ -57,6 +56,43 @@ def _fig(db):
     if "_fig" not in db.info:
         db.info["_fig"] = current_month_figures(db)
     return db.info["_fig"]
+
+
+# Zentrale, sichtbare Definitionen (Tooltip/Dokumentation) – jede Kennzahl hat genau EINE Berechnungsquelle.
+DEFINITIONS = {
+    "properties": "Aktive Objekte (nicht deaktiviert).",
+    "units": "Aktive Wohneinheiten aktiver Objekte.",
+    "active_main_leases": "Hauptmietverträge mit Status aktiv/gekündigt, die heute laufen (Beginn ≤ heute ≤ wirksames Ende).",
+    "active_subleases": "Untermietverträge mit Status aktiv/gekündigt, die heute laufen. Gekündigte Verträge laufen bis zum wirksamen Ende weiter und zählen mit (davon-Angabe).",
+    "active_tenants": "Verschiedene Personen/Firmen mit mindestens einem laufenden Untermietvertrag als Mieter oder Mitmieter. Personen ohne laufenden Vertrag, Bewohner und Bürgen zählen nicht.",
+    "main_rent_obligations": "Soll der Hauptmieten (Kalt + Nebenkosten) für den laufenden Monat, tagesanteilig laut Vertragskonditionen (aus der zentralen Soll-Berechnung).",
+    "sublease_receivables": "Soll der Untermieten (Kalt + Nebenkosten) für den laufenden Monat, tagesanteilig laut Vertragskonditionen.",
+    "open_receivables": "Summe aller offenen Forderungen gegen Untermieter (Sollstellungen abzüglich zugeordneter Zahlungen), unabhängig von der Fälligkeit.",
+    "overdue_payments": "Anzahl offener Forderungspositionen (Sollstellungen), deren Fälligkeit vor heute liegt – nach Teilzahlungen.",
+    "monthly_utility_costs": "Nebenkosten-Soll der Hauptmieten (Vorauszahlung + Pauschale) für den laufenden Monat.",
+    "open_tasks": "Aufgaben mit Status offen, in Bearbeitung oder wartet.",
+    "overdue_tasks": "Offene Aufgaben mit Fälligkeit vor heute.",
+    "open_repairs": "Reparaturen mit Status gemeldet, terminiert, in Arbeit oder wartet.",
+    "physical_vacancy": "Anzahl heute unbelegter kleinster Einheiten (Bett, Zimmer ohne Betten, Wohneinheit ohne Zimmer) ohne laufenden Untermietvertrag.",
+    "economic_vacancy_cost": "Hauptmiete-Soll (Kalt+NK) des laufenden Monats an Tagen mit Mietverpflichtung, aber ohne laufenden Untermietvertrag (Teil der Hauptmietkosten).",
+    "upcoming_contract_ends": "Laufende Verträge, deren wirksames Ende in den nächsten 90 Tagen liegt.",
+}
+
+
+def _hint(db, key):
+    if key in ("active_subleases", "active_tenants"):
+        running = _running(db, "sub")
+        if key == "active_subleases":
+            n = sum(1 for x in running if x.status == "terminated")
+        else:  # Mieter, deren sämtliche laufenden Verträge gekündigt sind
+            by: dict[int, list[bool]] = {}
+            for x in running:
+                for p in x.parties:
+                    if p.role in ("lessee", "co_lessee"):
+                        by.setdefault(p.party_id, []).append(x.status == "terminated")
+            n = sum(1 for flags in by.values() if all(flags))
+        return f"davon {n} in Kündigung" if n else None
+    return None
 
 
 # Implementierte Kennzahlen: key -> (Funktion(db) -> Wert, Format). Geld als String-Dezimal.
@@ -108,6 +144,9 @@ def build_dashboard(db: Session) -> dict:
             kpis.append({"key": key, "label": label, "value": None, "available": False, "planned_phase": phase})
         else:
             kpis.append({"key": key, "label": label, "value": fn(db), "available": True, "planned_phase": phase})
+    for k in kpis:
+        k["definition"] = DEFINITIONS[k["key"]]
+        k["hint"] = _hint(db, k["key"])
     from leventum.api.master import js
     from leventum.services import reminders as rem, tasks as tk
     from leventum.api.master import ser

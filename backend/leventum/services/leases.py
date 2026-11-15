@@ -27,6 +27,26 @@ def _span(lease: Lease) -> tuple[date, date]:
     return lease.start_date, effective_end(lease) or OPEN_END
 
 
+def is_running(lease: Lease, day: date | None = None) -> bool:
+    """ZENTRALE Definition „laufender Vertrag“: Status aktiv oder gekündigt UND Tag zwischen Beginn und wirksamem Ende.
+    Gekündigte Verträge laufen bis zum wirksamen Ende weiter (die Kündigung ist ein Zusatzmerkmal, kein Ende)."""
+    day = day or date.today()
+    return lease.status in domain.RUNNING_STATUS and lease.start_date <= day <= (effective_end(lease) or OPEN_END)
+
+
+def phase(lease: Lease, today: date | None = None) -> str:
+    """Anzeigephase eines Vertrags: draft | cancelled | upcoming | active | notice | ended."""
+    today = today or date.today()
+    if lease.status in ("draft", "cancelled"):
+        return lease.status
+    end = effective_end(lease)
+    if lease.status == "ended" or (end is not None and end < today):
+        return "ended"
+    if lease.start_date > today:
+        return "upcoming"
+    return "notice" if lease.status == "terminated" else "active"
+
+
 def overlaps(a: tuple[date, date], b: tuple[date, date]) -> bool:
     return a[0] <= b[1] and b[0] <= a[1]
 
