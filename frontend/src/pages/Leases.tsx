@@ -5,6 +5,7 @@ import { dateDe, eur, useFetch } from "../lib/hooks";
 import { Badge, Card, EmptyState, PageHeader } from "../components/ui";
 import { Field, Modal, Select, Text } from "../components/Form";
 import DocPanel from "../components/DocPanel";
+import { useDialogs } from "../components/Dialogs";
 
 interface LeaseRow { id: number; kind: string; status: string; type: string; start_date: string; end_date: string | null; spaces: string[]; parties: { party_id: number; name: string; role: string }[] }
 interface Issue { code: string; message: string }
@@ -103,6 +104,7 @@ const IssueList = ({ title, tone, items }: { title: string; tone: "err" | "warn"
 export function LeaseDetail() {
   const { id } = useParams();
   const { data, error, reload } = useFetch<Detail>(`/leases/${id}`);
+  const { ask } = useDialogs();
   const [issues, setIssues] = useState<Validation | null>(null);
   const [msg, setMsg] = useState("");
   if (error) return <div className="alert err">{error}</div>;
@@ -120,7 +122,7 @@ export function LeaseDetail() {
       <div className="toolbar">
         <Badge tone={STATUS[data.status][1]}>{STATUS[data.status][0]}</Badge>
         {data.status === "draft" && <button className="btn primary" onClick={() => run(() => api(`/leases/${id}/activate`, { method: "POST" }))}>Prüfen &amp; aktivieren</button>}
-        {data.status === "active" && <button className="btn" onClick={() => { const eff = window.prompt("Beendigungsdatum (JJJJ-MM-TT)"); if (eff) run(() => api(`/leases/${id}/terminate`, { method: "POST", json: { terminated_on: new Date().toISOString().slice(0, 10), effective_on: eff } })); }}>Kündigung erfassen</button>}
+        {data.status === "active" && <button className="btn" onClick={async () => { const eff = await ask("Zu welchem Datum endet das Mietverhältnis (wirksames Ende)?", { title: "Kündigung erfassen", type: "date" }); if (eff) run(() => api(`/leases/${id}/terminate`, { method: "POST", json: { terminated_on: new Date().toISOString().slice(0, 10), effective_on: eff } })); }}>Kündigung erfassen</button>}
       </div>
       {msg && <div className="alert err">{msg}</div>}
       {v && <><IssueList title="Fehler" tone="err" items={v.errors} /><IssueList title="Warnungen" tone="warn" items={v.warnings} /><IssueList title="Hinweise (keine Rechtsauskunft)" tone="ok" items={v.hints} /></>}
@@ -142,8 +144,8 @@ export function LeaseDetail() {
         <p className="muted" style={{ marginBottom: 10 }}>Die Software ordnet Verträge nicht rechtlich ein. Hier dokumentieren Sie nur Ihre eigene bzw. anwaltliche Einordnung.</p>
         <dl className="kv"><dt>Prüfstatus</dt><dd>{REVIEW[data.legal_review_status]}</dd><dt>Rechtliche Grundlage</dt><dd>{data.legal_basis_ref ?? "–"}</dd><dt>Prüfvermerk</dt><dd>{data.legal_basis_note ?? "–"}</dd></dl>
         <div className="toolbar" style={{ marginTop: 12 }}>
-          <button className="btn" onClick={() => { const ref = window.prompt("Rechtliche Grundlage (Freitext, z. B. § 549 BGB) – leer lassen, wenn keine"); const note = window.prompt("Prüfvermerk (wer hat wann geprüft?)"); if (note) run(() => api(`/leases/${id}/legal-review`, { method: "POST", json: { status: "reviewed", basis_ref: ref || null, basis_note: note } })); }}>Prüfung dokumentieren</button>
-          <button className="btn" onClick={() => { const t = window.prompt("Interner Hinweis / Vermerk"); if (t) run(() => api(`/leases/${id}/notes`, { method: "POST", json: { kind: "note", text: t } })); }}>Vermerk hinzufügen</button>
+          <button className="btn" onClick={async () => { const ref = await ask("Rechtliche Grundlage (Freitext, z. B. § 549 BGB) – leer lassen, wenn keine", { title: "Rechtliche Prüfung dokumentieren", required: false }); if (ref === null) return; const note = await ask("Prüfvermerk (wer hat wann geprüft?)", { title: "Rechtliche Prüfung dokumentieren", type: "textarea" }); if (note) run(() => api(`/leases/${id}/legal-review`, { method: "POST", json: { status: "reviewed", basis_ref: ref || null, basis_note: note } })); }}>Prüfung dokumentieren</button>
+          <button className="btn" onClick={async () => { const t = await ask("Interner Hinweis / Vermerk", { type: "textarea" }); if (t) run(() => api(`/leases/${id}/notes`, { method: "POST", json: { kind: "note", text: t } })); }}>Vermerk hinzufügen</button>
         </div>
         {data.notes.map((n) => <div className="list-row" key={n.id}><span className="muted">{dateDe(n.created_at)}</span><span>{n.text}</span></div>)}
       </Card>

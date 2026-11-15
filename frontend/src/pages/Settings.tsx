@@ -2,8 +2,10 @@ import { useCallback, useEffect, useState } from "react";
 import { api, ApiError, type BackupList } from "../lib/api";
 import { Card, PageHeader } from "../components/ui";
 import { useFetch } from "../lib/hooks";
+import { useDialogs } from "../components/Dialogs";
 
 export default function Settings() {
+  const { confirmBox } = useDialogs();
   const [b, setB] = useState<BackupList | null>(null);
   const [msg, setMsg] = useState<{ tone: "ok" | "err" | "warn"; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -23,8 +25,8 @@ export default function Settings() {
     const r = await api<{ ok: boolean; problems: string[] }>(`/system/backups/${encodeURIComponent(id)}/verify`, { method: "POST" });
     setMsg(r.ok ? { tone: "ok", text: `${id}: intakt` } : { tone: "err", text: `${id}: ${r.problems.join("; ")}` });
   });
-  const restore = (id: string) => {
-    if (!window.confirm("Datenbank UND Dokumente werden durch den Stand dieses Backups ersetzt. Vorher wird automatisch ein Sicherheits-Backup des aktuellen Stands angelegt. Fortfahren?")) return;
+  const restore = async (id: string) => {
+    if (!(await confirmBox("Datenbank UND Dokumente werden durch den Stand dieses Backups ersetzt. Vorher wird automatisch ein Sicherheits-Backup des aktuellen Stands angelegt. Fortfahren?", { title: "Wiederherstellen", danger: true, confirmLabel: "Wiederherstellen" }))) return;
     run(async () => {
       const r = await api<{ safety_backup: string }>(`/system/backups/${encodeURIComponent(id)}/restore`, { method: "POST", json: { confirm: true } });
       setMsg({ tone: "warn", text: `Wiederhergestellt. Sicherheits-Backup: ${r.safety_backup}. Bitte laden Sie die Anwendung neu und melden Sie sich erneut an.` });

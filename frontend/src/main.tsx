@@ -2,6 +2,7 @@ import { StrictMode, useCallback, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import "./styles.css";
+import { DialogProvider } from "./components/Dialogs";
 import { api, ApiError, type User } from "./lib/api";
 import AppShell from "./components/AppShell";
 import Auth from "./pages/Auth";
@@ -78,4 +79,4 @@ function App() {
   );
 }
 
-createRoot(document.getElementById("root")!).render(<StrictMode><App /></StrictMode>);
+createRoot(document.getElementById("root")!).render(<StrictMode><DialogProvider><App /></DialogProvider></StrictMode>);

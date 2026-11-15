@@ -4,6 +4,7 @@ import { api, ApiError } from "../lib/api";
 import { dateDe, useFetch } from "../lib/hooks";
 import { Badge, Card, EmptyState, PageHeader } from "../components/ui";
 import { Field, Modal, Select, Text } from "../components/Form";
+import { useDialogs } from "../components/Dialogs";
 
 export interface TaskRow { id: number; title: string; description: string | null; priority: string; status: string; due_date: string | null; overdue: boolean; lease_id: number | null; party_id: number | null; property_id: number | null; repair_id: number | null; lease_label?: string; party_label?: string; property_label?: string; repair_label?: string }
 export const PRIO: Record<string, string> = { low: "Niedrig", normal: "Normal", high: "Hoch", urgent: "Dringend" };
@@ -38,13 +39,14 @@ export function TaskForm({ defaults, onDone }: { defaults?: Record<string, numbe
 }
 
 export default function TasksPage() {
+  const { ask, notify } = useDialogs();
   const [status, setStatus] = useState(""), [prio, setPrio] = useState(""), [overdue, setOverdue] = useState(false), [q, setQ] = useState(""), [open, setOpen] = useState(false);
   const qs = new URLSearchParams({ ...(status && { status }), ...(prio && { priority: prio }), ...(overdue && { overdue: "true" }), ...(q && { q }) }).toString();
   const { data, error, reload } = useFetch<{ items: TaskRow[] }>(`/tasks?${qs}`);
   async function setS(t: TaskRow, s: string) {
     let note: string | null = null;
-    if (s === "cancelled") { note = window.prompt("Begründung für das Abbrechen"); if (!note) return; }
-    try { await api(`/tasks/${t.id}/status`, { method: "POST", json: { status: s, note } }); reload(); } catch (e) { window.alert(e instanceof ApiError ? e.message : "Fehler"); }
+    if (s === "cancelled") { note = await ask("Begründung für das Abbrechen", { danger: true }); if (!note) return; }
+    try { await api(`/tasks/${t.id}/status`, { method: "POST", json: { status: s, note } }); reload(); } catch (e) { notify(e instanceof ApiError ? e.message : "Fehler"); }
   }
   return (
     <>

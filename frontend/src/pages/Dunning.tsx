@@ -3,6 +3,7 @@ import { api, ApiError } from "../lib/api";
 import { dateDe, eur, useFetch } from "../lib/hooks";
 import { Badge, Card, EmptyState, PageHeader } from "../components/ui";
 import { Modal } from "../components/Form";
+import { useDialogs } from "../components/Dialogs";
 
 interface Cand { charge_id: number; lease_id: number; lease_label: string; due_date: string; open_amount: string; days_overdue: number; proposed_level: number; state: string; charge_type: string }
 interface Notice { id: number; lease_id: number; level: number; level_name: string; status: string; recipient_name: string; subject: string; body: string; total_open: string; review_hint: string | null; sent_on: string | null; lines?: unknown[] }
@@ -10,6 +11,7 @@ const STATE: Record<string, string> = { due: "Mahnung fällig", waiting: "Wartef
 const NST: Record<string, [string, "ok" | "warn" | "err"]> = { draft: ["Entwurf", "warn"], approved: ["Freigegeben (nicht versandt)", "warn"], sent: ["Versandt (manuell dokumentiert)", "ok"], cancelled: ["Verworfen", "err"] };
 
 export function NoticeEditor({ id, onClose }: { id: number; onClose: () => void }) {
+  const { ask } = useDialogs();
   const { data, reload } = useFetch<Notice & { history: { at: string; summary: string }[] }>(`/dunning/notices/${id}`);
   const [body, setBody] = useState<string | null>(null), [err, setErr] = useState("");
   if (!data) return null;
@@ -25,10 +27,10 @@ export function NoticeEditor({ id, onClose }: { id: number; onClose: () => void 
         {data.status === "draft" && <>
           <button className="btn" onClick={() => run(() => api(`/dunning/notices/${id}`, { method: "PATCH", json: { body: text } }))}>Text speichern</button>
           <button className="btn primary" onClick={() => run(async () => { await api(`/dunning/notices/${id}`, { method: "PATCH", json: { body: text } }); await api(`/dunning/notices/${id}/approve`, { method: "POST" }); })}>Geprüft – freigeben</button>
-          <button className="btn danger" onClick={() => { const r = window.prompt("Grund für das Verwerfen"); if (r) run(() => api(`/dunning/notices/${id}/cancel`, { method: "POST", json: { reason: r } })); }}>Verwerfen</button></>}
+          <button className="btn danger" onClick={async () => { const r = await ask("Grund für das Verwerfen", { danger: true }); if (r) run(() => api(`/dunning/notices/${id}/cancel`, { method: "POST", json: { reason: r } })); }}>Verwerfen</button></>}
         {data.status === "approved" && <>
-          <button className="btn primary" onClick={() => { const via = window.prompt("Wie wurde das Schreiben versandt? (z. B. Brief, E-Mail)"); if (via) run(() => api(`/dunning/notices/${id}/mark-sent`, { method: "POST", json: { sent_on: new Date().toISOString().slice(0, 10), via } })); }}>Als versandt dokumentieren</button>
-          <button className="btn danger" onClick={() => { const r = window.prompt("Grund"); if (r) run(() => api(`/dunning/notices/${id}/cancel`, { method: "POST", json: { reason: r } })); }}>Verwerfen</button></>}
+          <button className="btn primary" onClick={async () => { const via = await ask("Wie wurde das Schreiben versandt? (z. B. Brief, E-Mail)", { title: "Versand dokumentieren" }); if (via) run(() => api(`/dunning/notices/${id}/mark-sent`, { method: "POST", json: { sent_on: new Date().toISOString().slice(0, 10), via } })); }}>Als versandt dokumentieren</button>
+          <button className="btn danger" onClick={async () => { const r = await ask("Grund für das Verwerfen", { danger: true }); if (r) run(() => api(`/dunning/notices/${id}/cancel`, { method: "POST", json: { reason: r } })); }}>Verwerfen</button></>}
       </div>
       <p className="muted">Die Software versendet nichts. Der Versand erfolgt außerhalb und wird hier nur dokumentiert.</p>
       <h2>Protokoll</h2>{data.history.map((h, i) => <div className="list-row" key={i}><span className="muted">{dateDe(h.at)}</span><span>{h.summary}</span></div>)}

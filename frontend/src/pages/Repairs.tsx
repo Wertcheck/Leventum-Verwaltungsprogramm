@@ -5,6 +5,7 @@ import { dateDe, eur, useFetch } from "../lib/hooks";
 import { Badge, Card, EmptyState, PageHeader } from "../components/ui";
 import { Field, Modal, Select, Text } from "../components/Form";
 import DocPanel from "../components/DocPanel";
+import { useDialogs } from "../components/Dialogs";
 import { PRIO, TaskForm, TaskLinks, TSTATUS, type TaskRow } from "./Tasks";
 
 interface Costs { estimate: string | null; actual: string; paid: string; open: string; invoice_ids: number[]; deviation_from_estimate: string | null }
@@ -51,6 +52,7 @@ export function RepairDetail() {
   const { id } = useParams();
   const { data, error, reload } = useFetch<Detail>(`/repairs/${id}`);
   const invs = useFetch<{ items: { id: number; invoice_number: string | null; amount: string; property_id: number; status: string; description: string | null }[] }>("/invoices");
+  const { ask } = useDialogs();
   const [taskOpen, setTaskOpen] = useState(false), [msg, setMsg] = useState("");
   if (error) return <div className="alert err">{error}</div>;
   if (!data) return null;
@@ -61,8 +63,8 @@ export function RepairDetail() {
       <PageHeader title={`Reparatur #${data.id}: ${data.title}`} subtitle={`${CAT[data.category]} · Priorität ${PRIO[data.priority]} · gemeldet ${dateDe(data.reported_on)}`} />
       {msg && <div className="alert err">{msg}</div>}
       <div className="toolbar"><Badge tone={tone(data.status)}>{RSTATUS[data.status]}</Badge>
-        <Select value={data.status} onChange={(s) => { if (s === "cancelled") { const n = window.prompt("Begründung für das Abbrechen"); if (n) run(() => api(`/repairs/${id}/status`, { method: "POST", json: { status: s, note: n } })); } else run(() => api(`/repairs/${id}/status`, { method: "POST", json: { status: s } })); }} options={Object.entries(RSTATUS).map(([value, label]) => ({ value, label }))} />
-        <button className="btn" onClick={() => { const t = window.prompt("Notiz zum Verlauf"); if (t) run(() => api(`/repairs/${id}/notes`, { method: "POST", json: { text: t } })); }}>Notiz</button></div>
+        <Select value={data.status} onChange={async (s) => { if (s === "cancelled") { const n = await ask("Begründung für das Abbrechen", { danger: true }); if (n) run(() => api(`/repairs/${id}/status`, { method: "POST", json: { status: s, note: n } })); } else run(() => api(`/repairs/${id}/status`, { method: "POST", json: { status: s } })); }} options={Object.entries(RSTATUS).map(([value, label]) => ({ value, label }))} />
+        <button className="btn" onClick={async () => { const t = await ask("Notiz zum Verlauf", { type: "textarea" }); if (t) run(() => api(`/repairs/${id}/notes`, { method: "POST", json: { text: t } })); }}>Notiz</button></div>
       <div className="grid two-col">
         <Card><div className="card-head"><h2>Verlauf</h2></div>{data.events.map((e) => <div className="list-row" key={e.id}><span className="muted">{dateDe(e.occurred_at)}</span><span>{e.text}</span></div>)}</Card>
         <Card><div className="card-head"><h2>Kosten</h2></div>

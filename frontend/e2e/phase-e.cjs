@@ -7,7 +7,7 @@ const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR
 (async () => {
   const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 1536, height: 1024 } });
   const errors = []; p.on("pageerror", (e) => errors.push(e.message)); p.on("console", (m) => m.type() === "error" && errors.push(m.text()));
-  const prompts = []; p.on("dialog", (d) => d.accept(prompts.shift() ?? ""));
+  const dlg = async (t) => { await p.fill("form.dialog input, form.dialog textarea", t); await p.click("form.dialog button[type=submit]"); };
   const ok = (m) => console.log("OK  ", m);
   const api = (method, path, body) => p.evaluate(async ([method, path, body]) => {
     const r = await fetch("/api/v1" + path, { method, headers: { "X-Leventum-Client": "1", "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
@@ -45,7 +45,7 @@ const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR
   await p.goto(base + "/reparaturen"); await p.click("text=Reparatur melden"); await pick(".modal select", "Haus Bergmann");
   await p.fill(".modal input.field >> nth=0", "Heizung defekt"); await p.fill(".modal input.field >> nth=3", "500.00"); await p.click(".modal button.primary");
   await p.waitForSelector("h1:has-text('Heizung defekt')"); ok("Reparatur gemeldet");
-  prompts.push("Monteur bestellt"); await p.click("button:has-text('Notiz')"); await p.waitForSelector("text=Monteur bestellt");
+  await p.click("button:has-text('Notiz')"); await dlg("Monteur bestellt"); await p.waitForSelector("text=Monteur bestellt");
   await pick("select", "Erledigt"); await p.waitForSelector(".badge:has-text('Erledigt')"); ok("Notiz und Status im Verlauf");
   await pick(".card select", "SAN-1"); await p.waitForFunction(() => /Tatsächlich \(Rechnungen\)\s*300,00/.test(document.querySelector("dl.kv").textContent.replace(/\u00a0/g, " ")));
   console.log("Kosten:", (await p.textContent("dl.kv")).replace(/\s+/g, " ")); ok("Rechnung verknüpft → tatsächliche Kosten");
@@ -66,7 +66,7 @@ const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR
   console.log("Fehlende-Dokumente-Hinweis nach Upload+Protokoll:", await p.locator("text=Fehlende Dokumente").count()); ok("Vertrag: Dokument + Übergabeprotokoll → Pflichtliste erfüllt");
   // --- Dokumente-Seite ---
   await p.goto(base + "/dokumente"); await p.waitForSelector("a:has-text('Mietvertrag.pdf')"); await p.fill("input[aria-label=Suche]", "heizung"); await p.waitForSelector("a:has-text('heizung.png')");
-  prompts.push("Testlöschung"); await p.click("button:has-text('Löschen')"); await p.waitForFunction(() => !document.body.textContent.includes("heizung.png")); ok("Dokumentensuche und Löschen mit Begründung");
+  await p.click("button:has-text('Löschen')"); await dlg("Testlöschung"); await p.waitForFunction(() => !document.body.textContent.includes("heizung.png")); ok("Dokumentensuche und Löschen mit Begründung");
   await p.check("text=gelöschte anzeigen >> input"); await p.waitForSelector("text=gelöscht: Testlöschung"); ok("Gelöschtes Dokument nur noch in 'gelöschte anzeigen'");
   // --- Historie in Mieterakte ---
   await p.goto(base + `/parteien/${tenant.id}`); await p.waitForSelector("text=Historie"); await p.waitForFunction(() => document.body.textContent.includes("Heizung ist kalt"));

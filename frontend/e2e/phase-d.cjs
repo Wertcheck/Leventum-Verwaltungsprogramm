@@ -7,7 +7,7 @@ const IBAN = "DE89370400440532013000";
 (async () => {
   const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 1536, height: 1024 } });
   const errors = []; p.on("pageerror", (e) => errors.push(e.message)); p.on("console", (m) => m.type() === "error" && errors.push(m.text()));
-  const prompts = []; p.on("dialog", (d) => d.accept(prompts.shift() ?? ""));
+  const dlg = async (t) => { await p.fill("form.dialog input, form.dialog textarea", t); await p.click("form.dialog button[type=submit]"); };
   const ok = (m) => console.log("OK  ", m);
   const api = (method, path, body) => p.evaluate(async ([method, path, body]) => {
     const r = await fetch("/api/v1" + path, { method, headers: { "X-Leventum-Client": "1", "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
@@ -37,11 +37,11 @@ const IBAN = "DE89370400440532013000";
   ok("Verträge 850/180 → 1150/220 angelegt");
   // --- Sollstellungen ---
   await p.goto(base + "/finanzen"); await p.click("text=Sollstellungen erzeugen");
-  await p.fill(".modal input[type=month] >> nth=0", "2026-01"); await p.fill(".modal input[type=month] >> nth=1", "2026-03"); await p.click(".modal button.primary");
+  await p.fill(".modal input[type=month] >> nth=0", "2026-01"); await p.fill(".modal input[type=month] >> nth=1", "2026-03"); await p.click(".modal button:has-text('Vorschau berechnen')"); await p.waitForSelector("[data-testid=charge-preview]"); await p.check(".modal input[type=checkbox]"); await p.click(".modal button.primary");
   await p.waitForSelector("text=/\\d+ erzeugt/"); console.log("Erzeugung:", await p.textContent(".alert.ok, .alert.err"));
   await p.waitForSelector("td:has-text('Kaltmiete')"); ok("Sollstellungen sichtbar");
-  await p.click("text=Sollstellungen erzeugen"); await p.fill(".modal input[type=month] >> nth=0", "2026-01"); await p.fill(".modal input[type=month] >> nth=1", "2026-03"); await p.click(".modal button.primary");
-  await p.waitForSelector("text=/0 erzeugt, 12 bereits vorhanden/"); ok("Zweite Erzeugung: keine doppelten Sollstellungen (0 neu, 12 vorhanden)");
+  await p.click("text=Sollstellungen erzeugen"); await p.fill(".modal input[type=month] >> nth=0", "2026-01"); await p.fill(".modal input[type=month] >> nth=1", "2026-03"); await p.click(".modal button:has-text('Vorschau berechnen')");
+  await p.waitForSelector("text=/0 würden erzeugt, 12 sind bereits vorhanden/"); await p.click(".modal button:has-text('Schließen')"); ok("Zweite Erzeugung: keine doppelten Sollstellungen (0 neu, 12 vorhanden)");
   await p.screenshot({ path: "/tmp/shots/d-finanzen.png", fullPage: true });
   // --- Mahnwesen ---
   await p.goto(base + "/mahnwesen"); await p.waitForSelector("td:has-text('Mahnung fällig')");
@@ -51,7 +51,7 @@ const IBAN = "DE89370400440532013000";
   await p.click("text=Geprüft – freigeben"); await p.waitForSelector(".modal .alert.err"); console.log("Freigabe ohne Frist:", await p.textContent(".modal .alert.err")); ok("Freigabe mit offenem Platzhalter blockiert");
   const txt = (await p.inputValue("textarea")).replace("[Frist eintragen]", "30.11.2026"); await p.fill("textarea", txt);
   await p.click("text=Geprüft – freigeben"); await p.waitForSelector("text=Als versandt dokumentieren"); ok("Entwurf manuell freigegeben");
-  prompts.push("Brief"); await p.click("text=Als versandt dokumentieren"); await p.waitForSelector("text=/Versandt \\(manuell/"); ok("Versand manuell dokumentiert (kein Sendeknopf vorhanden)");
+  await p.click("text=Als versandt dokumentieren"); await dlg("Brief"); await p.waitForSelector("text=/Versandt \\(manuell/"); ok("Versand manuell dokumentiert (kein Sendeknopf vorhanden)");
   console.log("Sende-Schaltflächen:", await p.locator("button:text-matches('^(Senden|Versenden)', 'i')").count());
   await p.screenshot({ path: "/tmp/shots/d-mahnung.png" });
   // --- Bankimport ---

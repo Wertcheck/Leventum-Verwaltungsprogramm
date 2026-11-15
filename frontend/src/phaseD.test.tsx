@@ -1,4 +1,7 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render as rtlRender, screen, waitFor } from "@testing-library/react";
+import { DialogProvider } from "./components/Dialogs";
+import type { ReactElement } from "react";
+const render = (ui: ReactElement) => rtlRender(ui, { wrapper: DialogProvider });
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, vi } from "vitest";
 import { KpiCard } from "./components/ui";

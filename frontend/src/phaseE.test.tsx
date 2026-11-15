@@ -1,4 +1,7 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render as rtlRender, within, screen, waitFor } from "@testing-library/react";
+import { DialogProvider } from "./components/Dialogs";
+import type { ReactElement } from "react";
+const render = (ui: ReactElement) => rtlRender(ui, { wrapper: DialogProvider });
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, vi } from "vitest";
 import TasksPage from "./pages/Tasks";
@@ -34,8 +37,8 @@ describe("Aufgaben", () => {
     render(<MemoryRouter><TasksPage /></MemoryRouter>);
     await screen.findByText("Schlüssel nachmachen");
     const sel = screen.getByLabelText("Status Schlüssel nachmachen");
-    vi.stubGlobal("prompt", vi.fn(() => null));
     fireEvent.change(sel, { target: { value: "cancelled" } });
+    fireEvent.click(await screen.findByText("Abbrechen"));
     expect(posts().length).toBe(0);
     fireEvent.change(sel, { target: { value: "done" } });
     await waitFor(() => expect(posts().length).toBe(1));
@@ -103,11 +106,12 @@ describe("Dokumente", () => {
     const changed = vi.fn();
     const { rerender } = render(<DocRow d={doc} onChanged={changed} />);
     expect(screen.getByText("Mietvertrag.pdf").closest("a")?.getAttribute("href")).toBe("/api/v1/documents/4/download");
-    vi.stubGlobal("prompt", vi.fn(() => null));
     fireEvent.click(screen.getByText("Löschen"));
+    fireEvent.click(await screen.findByText("Abbrechen"));
     expect(posts().length).toBe(0);
-    vi.stubGlobal("prompt", vi.fn(() => "Doppelt hochgeladen"));
     fireEvent.click(screen.getByText("Löschen"));
+    fireEvent.change(await screen.findByRole("textbox"), { target: { value: "Doppelt hochgeladen" } });
+    fireEvent.click(within(screen.getByRole("dialog")).getByText("Löschen"));
     await waitFor(() => expect(changed).toHaveBeenCalled());
     expect(JSON.parse(String(posts()[0].init?.body))).toEqual({ reason: "Doppelt hochgeladen" });
     rerender(<DocRow d={{ ...doc, deleted_at: "2026-02-01", delete_reason: "Doppelt" }} onChanged={changed} />);

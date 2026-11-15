@@ -4,6 +4,7 @@ import { api, ApiError } from "../lib/api";
 import { pref, useFetch } from "../lib/hooks";
 import { Badge, Card, EmptyState, PageHeader } from "../components/ui";
 import { Field, Modal, Select, Text } from "../components/Form";
+import { useDialogs } from "../components/Dialogs";
 
 interface Prop { id: number; name: string; street: string | null; postal_code: string | null; city: string | null; property_type: string; unit_count: number; owner_name: string | null }
 interface Bed { id: number; label: string }
@@ -56,7 +57,8 @@ export function PropertyDetail() {
   const { data, error, reload } = useFetch<Prop & { units: UnitT[]; rentable_units: RU[] }>(`/properties/${id}`);
   const [err, setErr] = useState("");
   async function act(fn: () => Promise<unknown>) { setErr(""); try { await fn(); reload(); } catch (x) { setErr(x instanceof ApiError ? x.message : "Fehler"); } }
-  const ask = (q: string) => window.prompt(q)?.trim() || null;
+  const dlg = useDialogs();
+  const ask = (q: string) => dlg.ask(q);
   if (error) return <div className="alert err">{error}</div>;
   if (!data) return null;
   const rentable = (extra: Record<string, number>) => act(() => api("/rentable-units", { method: "POST", json: { property_id: data.id, ...extra } }));
@@ -68,13 +70,13 @@ export function PropertyDetail() {
       <div className="grid two-col">
         <Card>
           <div className="card-head"><h2>Wohneinheiten, Zimmer, Betten</h2>
-            <button className="btn small" onClick={() => { const n = ask("Nummer der Wohneinheit"); if (n) act(() => api(`/properties/${data.id}/units`, { method: "POST", json: { unit_number: n } })); }}>+ Wohneinheit</button></div>
+            <button className="btn small" onClick={async () => { const n = await ask("Nummer der Wohneinheit"); if (n) act(() => api(`/properties/${data.id}/units`, { method: "POST", json: { unit_number: n } })); }}>+ Wohneinheit</button></div>
           <div className="tree"><ul style={{ margin: 0, padding: 0, border: 0 }}>{data.units.map((u) => (
             <li key={u.id}><div className="node"><strong>{pref("WE", u.unit_number)}</strong><span className="muted">{u.living_area ? `${u.living_area} m²` : "Fläche fehlt"}</span>
-              <button className="btn small" onClick={() => { const n = ask("Name des Zimmers"); if (n) act(() => api(`/units/${u.id}/rooms`, { method: "POST", json: { name: n } })); }}>+ Zimmer</button></div>
+              <button className="btn small" onClick={async () => { const n = await ask("Name des Zimmers"); if (n) act(() => api(`/units/${u.id}/rooms`, { method: "POST", json: { name: n } })); }}>+ Zimmer</button></div>
               <ul>{u.rooms.map((r) => (
                 <li key={r.id}><div className="node">{pref("Zimmer", r.name)}
-                  <button className="btn small" onClick={() => { const n = ask("Bezeichnung des Betts"); if (n) act(() => api(`/rooms/${r.id}/beds`, { method: "POST", json: { label: n } })); }}>+ Bett</button></div>
+                  <button className="btn small" onClick={async () => { const n = await ask("Bezeichnung des Betts"); if (n) act(() => api(`/rooms/${r.id}/beds`, { method: "POST", json: { label: n } })); }}>+ Bett</button></div>
                   <ul>{r.beds.map((b) => <li key={b.id}>{pref("Bett", b.label)}</li>)}</ul></li>))}</ul></li>))}</ul></div>
           {data.units.length === 0 && <EmptyState title="Noch keine Wohneinheiten" />}
         </Card>

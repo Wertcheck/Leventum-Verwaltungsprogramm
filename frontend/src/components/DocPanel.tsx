@@ -3,13 +3,15 @@ import { api, ApiError, upload } from "../lib/api";
 import { dateDe, useFetch } from "../lib/hooks";
 import { Card } from "./ui";
 import { Select } from "./Form";
+import { useDialogs } from "./Dialogs";
 
 export interface Doc { id: number; original_name: string; mime: string; size: number; doc_type: string; uploaded_at: string; links: { entity_type: string; entity_id: number }[]; deleted_at?: string | null; delete_reason?: string | null }
 export const DOC_TYPES: Record<string, string> = { mietvertrag: "Mietvertrag", nachtrag: "Nachtrag", uebergabeprotokoll: "Übergabeprotokoll", rechnung: "Rechnung", betriebskostenabrechnung: "Betriebskostenabrechnung", schriftverkehr: "Schriftverkehr", versicherung: "Versicherung", reparaturbeleg: "Reparaturbeleg", kaution: "Kaution", sonstige: "Sonstige Unterlagen" };
 
 export function DocRow({ d, onChanged, extra }: { d: Doc; onChanged: () => void; extra?: string }) {
+  const { ask } = useDialogs();
   async function del() {
-    const r = window.prompt("Begründung für das Löschen (die Datei bleibt aus Aufbewahrungsgründen gespeichert)");
+    const r = await ask("Begründung für das Löschen (die Datei bleibt aus Aufbewahrungsgründen gespeichert)", { title: "Dokument löschen", danger: true, confirmLabel: "Löschen" });
     if (r) { await api(`/documents/${d.id}/delete`, { method: "POST", json: { reason: r } }); onChanged(); }
   }
   return (
