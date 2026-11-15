@@ -83,14 +83,14 @@ def tasks_status(tid: int, body: S.TaskStatusIn, db: Session = Depends(get_db), 
 
 # --- Erinnerungen -------------------------------------------------------------------------------------------------------------------
 @router.get("/reminders", dependencies=[Depends(require("dashboard:read"))])
-def reminders(db: Session = Depends(get_db)):
-    items = REM.compute(db)
+def reminders(db: Session = Depends(get_db), settings: Settings = Depends(get_settings)):
+    items = REM.compute(db, preview_days=settings.contract_end_preview_days)
     return {"items": js(items), "note": "Berechnet aus den aktuellen Daten. Fristen sind rechnerische Hinweise, keine Rechtsauskunft."}
 
 
 @router.post("/reminders/task", dependencies=[TW], status_code=201)
-def reminder_to_task(body: S.ReminderTaskIn, db: Session = Depends(get_db), user: AppUser = Depends(current_user)):
-    rem = next((r for r in REM.compute(db) if r["key"] == body.key), None)
+def reminder_to_task(body: S.ReminderTaskIn, db: Session = Depends(get_db), user: AppUser = Depends(current_user), settings: Settings = Depends(get_settings)):
+    rem = next((r for r in REM.compute(db, preview_days=settings.contract_end_preview_days) if r["key"] == body.key), None)
     if rem is None:
         raise ServiceError("not_found", "Die Erinnerung besteht nicht mehr.", 404)
     if rem["task_id"]:

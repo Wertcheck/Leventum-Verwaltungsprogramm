@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from datetime import date
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -81,8 +83,9 @@ def auth_me(user: AppUser = Depends(current_user)):
 
 
 @protected.get("/dashboard", dependencies=[Depends(require("dashboard:read"))])
-def dashboard(db: Session = Depends(get_db)):
-    return build_dashboard(db)
+def dashboard(as_of: date | None = Query(default=None, description="Stichtag (YYYY-MM-DD, nicht in der Zukunft); ohne Angabe heute"),
+              db: Session = Depends(get_db), settings: Settings = Depends(get_settings)):
+    return build_dashboard(db, as_of, settings.contract_end_preview_days)
 
 
 # --- Backup (nur Administrator) -------------------------------------------------------------

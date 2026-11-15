@@ -21,7 +21,7 @@ from leventum import domain
 from leventum.models import (Bed, Charge, Invoice, Lease, LeaseAllocationWeight, Payment, PaymentAllocation, Property, RentableUnit, Room, Unit,
                              UtilityStatement)
 from leventum.services import payments as pay
-from leventum.services.charges import BILLABLE_STATUS, month_range, monthly_components, open_amount
+from leventum.services.charges import BILLABLE_STATUS, month_range, monthly_components, open_amount, receivable_position  # receivable_position: eine Quelle für offene/überfällige Forderungen (ADR 0002)
 from leventum.services.errors import ServiceError
 from leventum.services.leases import OPEN_END, effective_end
 from leventum.services.master import chain as ru_chain, get_or_404, prefixed
@@ -453,13 +453,8 @@ def current_month_figures(db: Session, today: date | None = None) -> dict:
             res["main_utility"] += sum((v for k, v in comps.items() if k in UTIL_TYPES), Decimal(0))
         else:
             res["sub_total"] += tot
-    open_, overdue_n = ZERO, 0
-    for c in db.scalars(select(Charge).where(Charge.voided_at.is_(None), Charge.direction == "receivable")):
-        o = open_amount(db, c)
-        if o > 0:
-            open_ += o
-            if c.due_date < today:
-                overdue_n += 1
+    pos = receivable_position(db, today)
+    open_, overdue_n = pos["open_total"], pos["overdue_count"]
     first, last = date(y, m, 1), date(y, m, monthrange(y, m)[1])
     e = Engine(db, first, last)
     rep = e.report("portfolio")

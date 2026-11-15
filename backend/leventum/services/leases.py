@@ -34,6 +34,25 @@ def is_running(lease: Lease, day: date | None = None) -> bool:
     return lease.status in domain.RUNNING_STATUS and lease.start_date <= day <= (effective_end(lease) or OPEN_END)
 
 
+def contract_end_due(lease: Lease, today: date, days: int) -> date | None:
+    """ZENTRALE Definition „anstehendes Vertragsende“ (ADR 0002): Vertrag läuft am Stichtag (is_running) und sein wirksames Ende
+    liegt in [today, today + days] (beide Grenzen inklusiv). Liefert das wirksame Ende oder None (offenes Ende, nicht laufend, außerhalb)."""
+    if not is_running(lease, today):
+        return None
+    end = effective_end(lease)
+    return end if end is not None and today <= end <= today + timedelta(days=days) else None
+
+
+def upcoming_ends(db: Session, today: date, days: int) -> list[tuple[Lease, date]]:
+    """Alle Verträge (Haupt- und Untermiete) mit anstehendem Ende laut contract_end_due – einzige Quelle für Dashboard und Hinweise."""
+    out = []
+    for lease in db.scalars(select(Lease).where(Lease.status.in_(domain.RUNNING_STATUS))):
+        end = contract_end_due(lease, today, days)
+        if end is not None:
+            out.append((lease, end))
+    return out
+
+
 def phase(lease: Lease, today: date | None = None) -> str:
     """Anzeigephase eines Vertrags: draft | cancelled | upcoming | active | notice | ended."""
     today = today or date.today()

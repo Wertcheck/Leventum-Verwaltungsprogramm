@@ -57,7 +57,7 @@ Geldbeträge und Flächen sind JSON-Strings mit 2 Nachkommastellen. Validierungs
 | Ressource | Endpunkte |
 |---|---|
 | Aufgaben | `GET/POST /tasks` (Filter: `status`, `priority`, `overdue`, `open_only`, `q`, Bezüge), `GET/PATCH /tasks/{id}`, `POST /tasks/{id}/status` |
-| Erinnerungen | `GET /reminders`, `POST /reminders/task` (genau eine Aufgabe je Erinnerung) |
+| Erinnerungen | `GET /reminders`, `POST /reminders/task` (genau eine Aufgabe je Erinnerung); Vertragsende-Hinweise nutzen dieselbe Definition und denselben Vorschauzeitraum (`contract_end_preview_days`) wie das Dashboard; überfällige Forderungen nutzen `charges.receivable_position` (Stichtag heute) |
 | Reparaturen | `GET/POST /repairs`, `GET/PATCH /repairs/{id}`, `POST …/status`, `…/notes`, `…/invoices` |
 | Kommunikation | `GET/POST /communications` (kein Ändern/Löschen, kein Versand) |
 | Übergabeprotokolle | `GET/POST /handover-protocols` |
@@ -76,6 +76,7 @@ Geldbeträge und Flächen sind JSON-Strings mit 2 Nachkommastellen. Validierungs
 | `GET /dunning/overdue` | zusätzlich `summary.by_state` (due, draft_exists, approved_not_sent, waiting, max_level_reached), `charge_label`, `period_start/end` |
 | `GET /economics` | zusätzlich `datenstand`, `offen_zum_stichtag.{as_of,is_forecast}`, `prognose_periodenende` (nur gekennzeichnete Prognose) |
 | `GET /dashboard` | KPI-Felder `definition` und `hint`; „aktiver Mieter“ = Partei mit mind. einem laufenden Untermietvertrag als Mieter/Mitmieter (gekündigte, noch laufende Verträge zählen) |
+| `GET /dashboard?as_of=YYYY-MM-DD` | Entscheidung `docs/decisions/0002-dashboard-kpi-definitions.md`. `as_of` optional (ohne = heute, abwärtskompatibel); Zukunft → 422 `as_of_in_future`, ungültiges Format → 422. Antwort enthält `as_of` und je KPI `historical_supported`. Stichtagsfähig (`true`): aktive Haupt-/Untermietverträge, aktive Mieter, offene Forderungen, überfällige Zahlungen, anstehende Vertragsenden. Nicht stichtagsfähig (`false`, zeigen immer den heutigen Stand/Monat; keine erfundene Historie): Immobilien, Wohneinheiten, Aufgaben, Reparaturen, Leerstand, Monats-Soll/Betriebskosten. Offene Forderungen: Forderungen (`receivable`, nicht storniert) abzüglich Zahlungen mit `booking_date <= as_of`, unabhängig von der Fälligkeit (Annahme A1); überfällig = Rest > 0 und Fälligkeit < Stichtag. `units` = aktive Einheiten in aktiven Objekten. `upcoming_contract_ends` = zum Stichtag laufende Haupt- und Untermietverträge mit wirksamem Ende in `[as_of, as_of + contract_end_preview_days]`; der Zeitraum kommt aus der Einstellung `contract_end_preview_days` (Env `LEVENTUM_CONTRACT_END_PREVIEW_DAYS`, Standard 90, 1–730) und gilt identisch für `GET /reminders`. Bekannte Einschränkungen historischer Stichtage: ADR 0002 A6 (zurückgenommene Zuordnungen, heute stornierte Forderungen, heutige Stammdaten/Vertragsstatus). Recht `dashboard:read` unverändert |
 | `POST /documents/{id}/verify`, `/documents/verify-all`, `POST /documents/{id}/purge` | Integritätsprüfung; endgültige Entfernung nur Admin nach Aufbewahrungsfrist |
 | `GET /system/integrity` | Datenprüfung (siehe 04) |
 | `POST /system/backups` `{passphrase?}`, `…/verify`, `…/restore` `{confirm, passphrase?}` | optional verschlüsselte Backups (AES-256-GCM) |

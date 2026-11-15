@@ -74,6 +74,30 @@ def open_amount(db: Session, charge: Charge, as_of: date | None = None) -> Decim
     return q(charge.amount - allocated(db, charge.id, as_of))
 
 
+def receivable_position(db: Session, as_of: date) -> dict:
+    """ZENTRALE Definition „offene/überfällige Mietforderungen zum Stichtag“ (ADR 0002), reiner Lesepfad, gruppierte Abfrage (kein N+1).
+    Berücksichtigt: Forderungen direction=receivable, nicht storniert; je Forderung abzüglich Zuordnungen von Zahlungen mit
+    booking_date <= as_of (Stornobuchungen wirken ab eigenem Buchungsdatum). Nur Restbeträge > 0 (keine Verrechnung über Forderungen, A7).
+    open_total: unabhängig von der Fälligkeit (A1); overdue_count: offener Rest und due_date < as_of."""
+    from leventum.models import Payment
+    paid = (select(PaymentAllocation.charge_id.label("cid"), func.sum(PaymentAllocation.amount).label("paid"))
+            .join(Payment, Payment.id == PaymentAllocation.payment_id)
+            .where(PaymentAllocation.charge_id.is_not(None), Payment.booking_date <= as_of)
+            .group_by(PaymentAllocation.charge_id).subquery())
+    rows = db.execute(select(Charge.lease_id, Charge.amount, Charge.due_date, paid.c.paid).outerjoin(paid, paid.c.cid == Charge.id)
+                      .where(Charge.direction == "receivable", Charge.voided_at.is_(None)))
+    total, overdue = Decimal(0), 0
+    by_lease: dict[int, list[tuple[date, Decimal]]] = {}
+    for lease_id, amount, due, p in rows:
+        rest = q(Decimal(amount) - (Decimal(p) if p is not None else Decimal(0)))
+        if rest > 0:
+            total += rest
+            if due < as_of:
+                overdue += 1
+                by_lease.setdefault(lease_id, []).append((due, rest))
+    return {"open_total": q(total), "overdue_count": overdue, "overdue_by_lease": by_lease}  # by_lease: Detail für Hinweise, gleiche Semantik
+
+
 def period_months(rhythm: str, first_month: date, through_month: date):
     """Kalenderbasierte Abrechnungsperioden, die im Bereich [first_month, through_month] BEGINNEN: (Startmonat, Anzahl Monate).
     Quartale beginnen im Jan/Apr/Jul/Okt, Halbjahre im Jan/Jul, Jahre im Januar (Annahme, siehe docs)."""

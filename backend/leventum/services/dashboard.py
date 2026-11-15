@@ -25,63 +25,79 @@ KPI_DEFINITIONS = [
     ("upcoming_contract_ends", "Anstehende Vertragsenden", "C"),
 ]
 
-from datetime import date, timedelta
+from datetime import date
 
-from sqlalchemy import distinct, func, select
+from sqlalchemy import func, select
 
 from leventum import domain
-from leventum.models import Lease, LeaseParty, Property, Unit
-from leventum.services.leases import effective_end, is_running, phase
+from leventum.models import Lease, Property, Unit
+from leventum.services.charges import receivable_position
+from leventum.services.errors import ServiceError
+from leventum.services.leases import is_running, upcoming_ends
 
 
-def _running(db, kind):
-    return [x for x in db.scalars(select(Lease).where(Lease.kind == kind, Lease.status.in_(domain.RUNNING_STATUS))) if is_running(x)]
+def _running(db, kind, as_of=None):
+    return [x for x in db.scalars(select(Lease).where(Lease.kind == kind, Lease.status.in_(domain.RUNNING_STATUS))) if is_running(x, as_of)]
 
 
-def _active_tenants(db):
+def _active_tenants(db, as_of=None):
     """Aktiver Mieter = Person/Firma mit mindestens einem LAUFENDEN Untermietvertrag als Mieter/Mitmieter (Bewohner, Bürgen und Personen ohne Vertrag zählen nicht)."""
-    ids = {p.party_id for lease in _running(db, "sub") for p in lease.parties if p.role in ("lessee", "co_lessee")}
+    ids = {p.party_id for lease in _running(db, "sub", as_of) for p in lease.parties if p.role in ("lessee", "co_lessee")}
     return len(ids)
 
 
-def _upcoming_ends(db):
-    today, horizon = date.today(), date.today() + timedelta(days=90)
-    return sum(1 for lease in db.scalars(select(Lease).where(Lease.status.in_(domain.RUNNING_STATUS)))
-               if (e := effective_end(lease)) is not None and today <= e <= horizon)
+def _upcoming_ends(db, as_of, days):
+    return len(upcoming_ends(db, as_of, days))  # zentrale Definition in services/leases.py (gleiche Quelle wie /reminders)
+
+
+def _units(db):
+    """Aktive Wohneinheiten aktiver Objekte (analog economics.Structure)."""
+    return db.scalar(select(func.count()).select_from(Unit).join(Property, Property.id == Unit.property_id)
+                     .where(Unit.is_active.is_(True), Property.is_active.is_(True)))
 
 
 def _fig(db):
-    """Die Monatsauswertung ist aufwendig und wird je Dashboard-Aufruf (= je Session) nur einmal berechnet."""
+    """Die Monatsauswertung ist aufwendig und wird je Dashboard-Aufruf (= je Session) nur einmal berechnet.
+    Sie bezieht sich immer auf den heutigen Monat (keine Historie, siehe ADR 0002 A6); der Stichtag ist Teil des Cache-Schlüssels."""
     from leventum.services.economics import current_month_figures
-    if "_fig" not in db.info:
-        db.info["_fig"] = current_month_figures(db)
-    return db.info["_fig"]
+    key = ("_fig", db.info.get("_as_of"))
+    if key not in db.info:
+        db.info[key] = current_month_figures(db)
+    return db.info[key]
+
+
+def _pos(db, as_of):
+    """Offene/überfällige Forderungen zum Stichtag – zentrale Funktion charges.receivable_position, je Stichtag einmal je Aufruf."""
+    key = ("_pos", as_of)
+    if key not in db.info:
+        db.info[key] = receivable_position(db, as_of)
+    return db.info[key]
 
 
 # Zentrale, sichtbare Definitionen (Tooltip/Dokumentation) – jede Kennzahl hat genau EINE Berechnungsquelle.
 DEFINITIONS = {
     "properties": "Aktive Objekte (nicht deaktiviert).",
-    "units": "Aktive Wohneinheiten aktiver Objekte.",
+    "units": "Aktive Wohneinheiten in aktiven Objekten (inaktive Einheiten oder Einheiten inaktiver Objekte zählen nicht).",
     "active_main_leases": "Hauptmietverträge mit Status aktiv/gekündigt, die heute laufen (Beginn ≤ heute ≤ wirksames Ende).",
     "active_subleases": "Untermietverträge mit Status aktiv/gekündigt, die heute laufen. Gekündigte Verträge laufen bis zum wirksamen Ende weiter und zählen mit (davon-Angabe).",
     "active_tenants": "Verschiedene Personen/Firmen mit mindestens einem laufenden Untermietvertrag als Mieter oder Mitmieter. Personen ohne laufenden Vertrag, Bewohner und Bürgen zählen nicht.",
     "main_rent_obligations": "Soll der Hauptmieten (Kalt + Nebenkosten) für den laufenden Monat, tagesanteilig laut Vertragskonditionen (aus der zentralen Soll-Berechnung).",
     "sublease_receivables": "Soll der Untermieten (Kalt + Nebenkosten) für den laufenden Monat, tagesanteilig laut Vertragskonditionen.",
-    "open_receivables": "Summe aller offenen Forderungen gegen Untermieter (Sollstellungen abzüglich zugeordneter Zahlungen), unabhängig von der Fälligkeit.",
-    "overdue_payments": "Anzahl offener Forderungspositionen (Sollstellungen), deren Fälligkeit vor heute liegt – nach Teilzahlungen.",
+    "open_receivables": "Summe aller offenen Forderungen gegen Untermieter zum Stichtag (Sollstellungen abzüglich der Zahlungen mit Buchungsdatum bis zum Stichtag), unabhängig von der Fälligkeit; später gebuchte Zahlungen mindern den Stand zum Stichtag nicht.",
+    "overdue_payments": "Anzahl offener Forderungspositionen (Sollstellungen) zum Stichtag, deren Fälligkeit vor dem Stichtag liegt – nach Teilzahlungen mit Buchungsdatum bis zum Stichtag.",
     "monthly_utility_costs": "Nebenkosten-Soll der Hauptmieten (Vorauszahlung + Pauschale) für den laufenden Monat.",
     "open_tasks": "Aufgaben mit Status offen, in Bearbeitung oder wartet.",
     "overdue_tasks": "Offene Aufgaben mit Fälligkeit vor heute.",
     "open_repairs": "Reparaturen mit Status gemeldet, terminiert, in Arbeit oder wartet.",
     "physical_vacancy": "Anzahl heute unbelegter kleinster Einheiten (Bett, Zimmer ohne Betten, Wohneinheit ohne Zimmer) ohne laufenden Untermietvertrag.",
     "economic_vacancy_cost": "Hauptmiete-Soll (Kalt+NK) des laufenden Monats an Tagen mit Mietverpflichtung, aber ohne laufenden Untermietvertrag (Teil der Hauptmietkosten).",
-    "upcoming_contract_ends": "Laufende Verträge, deren wirksames Ende in den nächsten 90 Tagen liegt.",
+    "upcoming_contract_ends": "Zum Stichtag laufende Haupt- und Untermietverträge (Mietbeginn erreicht), deren wirksames Ende zwischen Stichtag und Stichtag + Vorschauzeitraum liegt (beide Grenzen inklusiv). Der Vorschauzeitraum ist konfigurierbar (Einstellung contract_end_preview_days, Standard 90 Tage). Verträge mit offenem Ende und nicht begonnene Verträge zählen nicht.",
 }
 
 
-def _hint(db, key):
+def _hint(db, key, as_of=None):
     if key in ("active_subleases", "active_tenants"):
-        running = _running(db, "sub")
+        running = _running(db, "sub", as_of)
         if key == "active_subleases":
             n = sum(1 for x in running if x.status == "terminated")
         else:  # Mieter, deren sämtliche laufenden Verträge gekündigt sind
@@ -95,14 +111,16 @@ def _hint(db, key):
     return None
 
 
-# Implementierte Kennzahlen: key -> (Funktion(db) -> Wert, Format). Geld als String-Dezimal.
+# Implementierte Kennzahlen: key -> Funktion(db, as_of, days) -> Wert. Geld als String-Dezimal.
 IMPLEMENTED_MONEY: dict = {
-    "main_rent_obligations": lambda db: _fig(db)["main_total"],
-    "sublease_receivables": lambda db: _fig(db)["sub_total"],
-    "open_receivables": lambda db: _fig(db)["open_receivables"],
-    "monthly_utility_costs": lambda db: _fig(db)["main_utility"],
-    "economic_vacancy_cost": lambda db: _fig(db)["economic_vacancy_cost"],
+    "main_rent_obligations": lambda db, a, n: _fig(db)["main_total"],
+    "sublease_receivables": lambda db, a, n: _fig(db)["sub_total"],
+    "open_receivables": lambda db, a, n: _pos(db, a)["open_total"],
+    "monthly_utility_costs": lambda db, a, n: _fig(db)["main_utility"],
+    "economic_vacancy_cost": lambda db, a, n: _fig(db)["economic_vacancy_cost"],
 }
+
+
 def _open_tasks(db):
     from leventum import domain as d
     from leventum.models import Task
@@ -122,33 +140,47 @@ def _open_repairs(db):
 
 
 IMPLEMENTED: dict = {
-    "open_tasks": _open_tasks, "overdue_tasks": _overdue_tasks, "open_repairs": _open_repairs,
-    "overdue_payments": lambda db: _fig(db)["overdue_count"],
-    "physical_vacancy": lambda db: _fig(db)["vacant_leaves"],
-    "properties": lambda db: db.scalar(select(func.count()).select_from(Property).where(Property.is_active.is_(True))),
-    "units": lambda db: db.scalar(select(func.count()).select_from(Unit).where(Unit.is_active.is_(True))),
-    "active_main_leases": lambda db: len(_running(db, "main")),
-    "active_subleases": lambda db: len(_running(db, "sub")),
-    "active_tenants": _active_tenants,
+    "open_tasks": lambda db, a, n: _open_tasks(db), "overdue_tasks": lambda db, a, n: _overdue_tasks(db), "open_repairs": lambda db, a, n: _open_repairs(db),
+    "overdue_payments": lambda db, a, n: _pos(db, a)["overdue_count"],
+    "physical_vacancy": lambda db, a, n: _fig(db)["vacant_leaves"],
+    "properties": lambda db, a, n: db.scalar(select(func.count()).select_from(Property).where(Property.is_active.is_(True))),
+    "units": lambda db, a, n: _units(db),
+    "active_main_leases": lambda db, a, n: len(_running(db, "main", a)),
+    "active_subleases": lambda db, a, n: len(_running(db, "sub", a)),
+    "active_tenants": lambda db, a, n: _active_tenants(db, a),
     "upcoming_contract_ends": _upcoming_ends,
 }
 
+# Stichtagsfähig (as_of wirkt echt): Verträge (Status/Stammdaten zeigen den heutigen Stand, ADR 0002 A6c), Forderungen, Überfällige, Vertragsenden.
+# Alle übrigen Kennzahlen zeigen immer den heutigen Stand bzw. den heutigen Monat (keine erfundene Historie).
+HISTORICAL_SUPPORTED = {"active_main_leases", "active_subleases", "active_tenants", "open_receivables", "overdue_payments", "upcoming_contract_ends"}
 
-def build_dashboard(db: Session) -> dict:
+
+def build_dashboard(db: Session, as_of: date | None = None, preview_days: int | None = None) -> dict:
+    """as_of=None -> heute. Zukunft -> 422. preview_days: Vorschauzeitraum Vertragsenden (None -> Standard aus Settings)."""
+    today = date.today()
+    if as_of is not None and as_of > today:
+        raise ServiceError("as_of_in_future", "Der Stichtag darf nicht in der Zukunft liegen (keine Prognose im Dashboard).", 422)
+    as_of = as_of or today
+    if preview_days is None:
+        from leventum.config import Settings
+        preview_days = Settings().contract_end_preview_days
+    db.info["_as_of"] = as_of
     kpis = []
     for key, label, phase in KPI_DEFINITIONS:
         fn = IMPLEMENTED.get(key)
         if key in IMPLEMENTED_MONEY:
-            kpis.append({"key": key, "label": label, "value": format(IMPLEMENTED_MONEY[key](db), "f"), "format": "eur", "available": True, "planned_phase": phase})
+            kpis.append({"key": key, "label": label, "value": format(IMPLEMENTED_MONEY[key](db, as_of, preview_days), "f"), "format": "eur", "available": True, "planned_phase": phase})
         elif fn is None:
             kpis.append({"key": key, "label": label, "value": None, "available": False, "planned_phase": phase})
         else:
-            kpis.append({"key": key, "label": label, "value": fn(db), "available": True, "planned_phase": phase})
+            kpis.append({"key": key, "label": label, "value": fn(db, as_of, preview_days), "available": True, "planned_phase": phase})
     for k in kpis:
         k["definition"] = DEFINITIONS[k["key"]]
-        k["hint"] = _hint(db, k["key"])
+        k["hint"] = _hint(db, k["key"], as_of)
+        k["historical_supported"] = k["key"] in HISTORICAL_SUPPORTED
     from leventum.api.master import js
     from leventum.services import reminders as rem, tasks as tk
     from leventum.api.master import ser
-    return {"kpis": kpis, "warnings": js(rem.compute(db)[:8]),
+    return {"as_of": as_of.isoformat(), "kpis": kpis, "warnings": js(rem.compute(db, preview_days=preview_days)[:8]),
             "tasks": [{**ser(t), "overdue": tk.is_overdue(t)} for t in tk.query(db, open_only=True)[:5]]}
