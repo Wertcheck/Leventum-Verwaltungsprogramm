@@ -5,6 +5,7 @@ import { pref, useFetch } from "../lib/hooks";
 import { Badge, Card, EmptyState, PageHeader } from "../components/ui";
 import { Field, Modal, Select, Text } from "../components/Form";
 import { useDialogs } from "../components/Dialogs";
+import EditDialog, { type EditField } from "../components/EditDialog";
 
 interface Prop { id: number; name: string; street: string | null; postal_code: string | null; city: string | null; property_type: string; unit_count: number; owner_name: string | null }
 interface Bed { id: number; label: string }
@@ -59,13 +60,19 @@ export function PropertyDetail() {
   async function act(fn: () => Promise<unknown>) { setErr(""); try { await fn(); reload(); } catch (x) { setErr(x instanceof ApiError ? x.message : "Fehler"); } }
   const dlg = useDialogs();
   const ask = (q: string) => dlg.ask(q);
+  const [editing, setEditing] = useState<null | { title: string; path: string; fields: EditField[]; initial: Record<string, unknown> }>(null);
   if (error) return <div className="alert err">{error}</div>;
   if (!data) return null;
+  const edit = (title: string, path: string, fields: EditField[], initial: object) => setEditing({ title, path, fields, initial: initial as Record<string, unknown> });
+  const sm = (data as unknown as { summary?: { units: number; rooms: number; beds: number; rentable: Record<string, { created: number; possible: number }> } }).summary;
   const rentable = (extra: Record<string, number>) => act(() => api("/rentable-units", { method: "POST", json: { property_id: data.id, ...extra } }));
   const has = (level: string, key: string, v: number) => data.rentable_units.some((r) => r.level === level && (r as unknown as Record<string, number>)[key] === v);
   return (
     <>
       <PageHeader title={data.name} subtitle={[data.street, data.postal_code, data.city].filter(Boolean).join(", ")} />
+      <div className="toolbar"><button className="btn" onClick={() => edit("Objekt bearbeiten", `/properties/${data.id}`, [{ key: "name", label: "Name" }, { key: "street", label: "Straße" }, { key: "postal_code", label: "PLZ" }, { key: "city", label: "Ort" }], data)}>Objekt bearbeiten</button></div>
+      {sm && <p className="muted" data-testid="summary">Struktur: {sm.units} Wohneinheit(en), {sm.rooms} Zimmer, {sm.beds} Bett(en). Als Vermietungseinheit angelegt: Objekt {sm.rentable.property.created} von {sm.rentable.property.possible}, WE {sm.rentable.unit.created} von {sm.rentable.unit.possible}, Zimmer {sm.rentable.room.created} von {sm.rentable.room.possible}, Betten {sm.rentable.bed.created} von {sm.rentable.bed.possible}. (Ein Zimmer ist erst vermietbar, wenn es als Vermietungseinheit angelegt ist.)</p>}
+      {editing && <EditDialog title={editing.title} path={editing.path} fields={editing.fields} initial={editing.initial} onClose={() => setEditing(null)} onSaved={reload} />}
       {err && <div className="alert err">{err}</div>}
       <div className="grid two-col">
         <Card>
@@ -73,11 +80,13 @@ export function PropertyDetail() {
             <button className="btn small" onClick={async () => { const n = await ask("Nummer der Wohneinheit"); if (n) act(() => api(`/properties/${data.id}/units`, { method: "POST", json: { unit_number: n } })); }}>+ Wohneinheit</button></div>
           <div className="tree"><ul style={{ margin: 0, padding: 0, border: 0 }}>{data.units.map((u) => (
             <li key={u.id}><div className="node"><strong>{pref("WE", u.unit_number)}</strong><span className="muted">{u.living_area ? `${u.living_area} m²` : "Fläche fehlt"}</span>
+              <button className="btn small" onClick={() => edit("Wohneinheit bearbeiten", `/units/${u.id}`, [{ key: "unit_number", label: "Nummer" }, { key: "floor", label: "Etage" }, { key: "living_area", label: "Wohnfläche (m²)" }, { key: "rooms_count", label: "Zimmeranzahl", type: "number" }], u)}>Bearbeiten</button>
               <button className="btn small" onClick={async () => { const n = await ask("Name des Zimmers"); if (n) act(() => api(`/units/${u.id}/rooms`, { method: "POST", json: { name: n } })); }}>+ Zimmer</button></div>
               <ul>{u.rooms.map((r) => (
                 <li key={r.id}><div className="node">{pref("Zimmer", r.name)}
+                  <button className="btn small" onClick={() => edit("Zimmer bearbeiten", `/rooms/${r.id}`, [{ key: "name", label: "Name" }, { key: "area", label: "Fläche (m²)" }], r)}>Bearbeiten</button>
                   <button className="btn small" onClick={async () => { const n = await ask("Bezeichnung des Betts"); if (n) act(() => api(`/rooms/${r.id}/beds`, { method: "POST", json: { label: n } })); }}>+ Bett</button></div>
-                  <ul>{r.beds.map((b) => <li key={b.id}>{pref("Bett", b.label)}</li>)}</ul></li>))}</ul></li>))}</ul></div>
+                  <ul>{r.beds.map((b) => <li key={b.id}>{pref("Bett", b.label)} <button className="btn small" onClick={() => edit("Bett bearbeiten", `/beds/${b.id}`, [{ key: "label", label: "Bezeichnung" }], b)}>Bearbeiten</button></li>)}</ul></li>))}</ul></li>))}</ul></div>
           {data.units.length === 0 && <EmptyState title="Noch keine Wohneinheiten" />}
         </Card>
         <Card>

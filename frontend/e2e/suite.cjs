@@ -158,7 +158,29 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await test("17 Dashboard: KPI-Definitionen (Info-Symbole) vorhanden", async () => {
     await p.goto(base + "/"); await p.waitForSelector(".kpi-info"); expect((await p.locator(".kpi-info").count()) > 5, "Keine KPI-Definitionen");
   });
-  await test("18 Keine JavaScript-Fehler während des gesamten Laufs", async () => { expect(errors.length === 0, errors.slice(0, 3).join(" | ")); });
+  await test("18 Stammdaten bearbeiten: Partei und Zimmer, Änderung wird gespeichert", async () => {
+    const S = ctxState;
+    await p.goto(base + `/parteien/${S.tenant.id}`); await p.click("button:has-text('Stammdaten bearbeiten')");
+    const city = p.locator(".modal label:has-text('Ort') input"); await city.fill("Hamburg"); await p.click(".modal button.primary"); await p.waitForFunction(() => !document.querySelector(".modal"));
+    expect((await api("GET", `/parties/${S.tenant.id}`)).city === "Hamburg", "Ort nicht gespeichert");
+    await p.goto(base + `/objekte/${S.prop.id}`); await p.waitForSelector("[data-testid=summary]");
+    await p.click(".node:has-text('Zimmer 1') >> button:has-text('Bearbeiten')"); await p.locator(".modal label:has-text('Name') input").fill("Zimmer Süd"); await p.click(".modal button.primary");
+    await p.waitForSelector("text=Zimmer Süd");
+  });
+  await test("19 Mietkonditionen als neue Version: Historie bleibt, Soll ändert sich nicht rückwirkend", async () => {
+    const S = ctxState; const before = (await api("GET", "/charges?lease_id=" + S.sub.id)).items.length;
+    await p.goto(base + `/vertraege/${S.sub.id}`); await p.click("button:has-text('Neue Konditionen (Version)')");
+    await p.locator(".modal label:has-text('Gültig ab') input").fill("2027-01-01"); await p.locator(".modal label:has-text('Kaltmiete') input").fill("1200.00");
+    await p.click(".modal button.primary"); await p.waitForFunction(() => !document.querySelector(".modal"));
+    const d = await api("GET", `/leases/${S.sub.id}`); expect(d.terms.length >= 2, "Keine zweite Version");
+    expect((await api("GET", "/charges?lease_id=" + S.sub.id)).items.length === before, "Sollstellungen wurden still verändert");
+  });
+  await test("20 Vertragsende ändern: Hinweis auf unveränderte Sollstellungen außerhalb der Laufzeit", async () => {
+    const S = ctxState; await p.goto(base + `/vertraege/${S.sub.id}`); await p.click("button:has-text('Vertrag bearbeiten')");
+    await p.locator(".modal label:has-text('Ende') input").fill("2026-01-31"); await p.click(".modal button.primary");
+    await p.waitForSelector("text=/NICHT verändert|nicht verändert/");
+  });
+  await test("21 Keine JavaScript-Fehler während des gesamten Laufs", async () => { expect(errors.length === 0, errors.slice(0, 3).join(" | ")); });
 
   await b.close(); srv.kill(); fs.rmSync(data, { recursive: true, force: true });
   const failed = results.filter((r) => !r[0]);

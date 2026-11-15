@@ -6,6 +6,7 @@ import { Badge, Card, EmptyState, PageHeader } from "../components/ui";
 import { Field, Modal, Select, Text } from "../components/Form";
 import DocPanel from "../components/DocPanel";
 import { useDialogs } from "../components/Dialogs";
+import EditDialog from "../components/EditDialog";
 
 interface LeaseRow { id: number; kind: string; status: string; type: string; start_date: string; end_date: string | null; spaces: string[]; parties: { party_id: number; name: string; role: string }[] }
 interface Issue { code: string; message: string }
@@ -107,6 +108,7 @@ export function LeaseDetail() {
   const { ask } = useDialogs();
   const [issues, setIssues] = useState<Validation | null>(null);
   const [msg, setMsg] = useState("");
+  const [editing, setEditing] = useState<null | "lease" | "terms">(null);
   if (error) return <div className="alert err">{error}</div>;
   if (!data) return null;
   async function run(fn: () => Promise<unknown>) {
@@ -119,8 +121,15 @@ export function LeaseDetail() {
   return (
     <>
       <PageHeader title={`${data.kind === "main" ? "Hauptmietvertrag" : "Untermietvertrag"} #${data.id}`} subtitle={`${data.type} · ${data.spaces.join("; ")}`} />
+      {editing === "lease" && <EditDialog title="Vertrag bearbeiten" path={`/leases/${id}`} initial={data as unknown as Record<string, unknown>} onClose={() => setEditing(null)} onSaved={reload}
+        note="Wird das Vertragsende oder der Beginn geändert, bleiben bereits erzeugte Sollstellungen unverändert; Abweichungen werden angezeigt."
+        fields={[{ key: "contract_number", label: "Vertragsnummer" }, { key: "start_date", label: "Beginn", type: "date" }, { key: "end_date", label: "Ende", type: "date" }, { key: "payment_rhythm", label: "Zahlungsrhythmus", type: "select", options: [{ value: "monthly", label: "monatlich" }, { value: "quarterly", label: "vierteljährlich" }, { value: "half_yearly", label: "halbjährlich" }, { value: "yearly", label: "jährlich" }, { value: "on_demand", label: "nach Bedarf (keine automatische Sollstellung)" }] }, { key: "payment_due_day", label: "Fälligkeitstag im Monat", type: "number" }, { key: "notice_period_months", label: "Kündigungsfrist (Monate)", type: "number" }]} />}
+      {editing === "terms" && <EditDialog title="Neue Mietkonditionen (Version)" method="POST" path={`/leases/${id}/terms`} initial={{}} onClose={() => setEditing(null)} onSaved={reload}
+        note="Legt eine neue Version ab dem gewählten Datum an. Frühere Versionen und bereits erzeugte Sollstellungen bleiben unverändert; es gibt keine stille Rückwirkung."
+        fields={[{ key: "valid_from", label: "Gültig ab", type: "date" }, { key: "base_rent", label: "Kaltmiete (€)" }, { key: "other_charges", label: "Sonstige Zuschläge (€)" }, { key: "note", label: "Anmerkung" }]} />}
       <div className="toolbar">
         <Badge tone={STATUS[data.status][1]}>{STATUS[data.status][0]}</Badge>
+        <button className="btn" onClick={() => setEditing("lease")}>Vertrag bearbeiten</button><button className="btn" onClick={() => setEditing("terms")}>Neue Konditionen (Version)</button>
         {data.status === "draft" && <button className="btn primary" onClick={() => run(() => api(`/leases/${id}/activate`, { method: "POST" }))}>Prüfen &amp; aktivieren</button>}
         {data.status === "active" && <button className="btn" onClick={async () => { const eff = await ask("Zu welchem Datum endet das Mietverhältnis (wirksames Ende)?", { title: "Kündigung erfassen", type: "date" }); if (eff) run(() => api(`/leases/${id}/terminate`, { method: "POST", json: { terminated_on: new Date().toISOString().slice(0, 10), effective_on: eff } })); }}>Kündigung erfassen</button>}
       </div>
