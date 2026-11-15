@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
+import { api } from "../lib/api";
 import { Icons } from "./icons";
 import { NAV, isGroup } from "../nav";
 import type { User } from "../lib/api";
@@ -36,15 +37,36 @@ function Sidebar() {
   );
 }
 
+interface Hit { type: string; id: number; title: string; subtitle: string; path: string }
+function GlobalSearch() {
+  const [q, setQ] = useState("");
+  const [hits, setHits] = useState<Hit[]>([]);
+  const [open, setOpen] = useState(false);
+  const run = (v: string) => {
+    setQ(v);
+    if (v.trim().length < 2) { setHits([]); return; }
+    api<{ items: Hit[] }>(`/search?q=${encodeURIComponent(v.trim())}`).then((r) => { setHits(r.items); setOpen(true); }).catch(() => setHits([]));
+  };
+  return (
+    <div className="search-wrap">
+      <div className="search"><Icons.search size={20} />
+        <input value={q} onChange={(e) => run(e.target.value)} onFocus={() => setOpen(true)} placeholder="Mieter, Objekt oder Vorgang suchen …" aria-label="Globale Suche" />
+      </div>
+      {open && q.trim().length >= 2 && (
+        <div className="search-results">
+          {hits.length === 0 && <div className="empty">Keine Treffer</div>}
+          {hits.map((h) => <Link key={`${h.type}${h.id}`} to={h.path} onClick={() => { setOpen(false); setQ(""); setHits([]); }}><strong>{h.title}</strong><div className="muted">{h.subtitle}</div></Link>)}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Topbar({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [menu, setMenu] = useState(false);
   return (
     <header className="topbar">
-      {/* Globale Suche folgt ab Phase C (Daten vorhanden). Bewusst deaktiviert statt Fake-Funktion. */}
-      <div className="search" title="Die globale Suche wird mit den Stammdaten (Phase C) aktiviert.">
-        <Icons.search size={20} />
-        <input disabled placeholder="Mieter, Objekt oder Vorgang suchen … (ab Phase C)" aria-label="Globale Suche" />
-      </div>
+      <GlobalSearch />
       <button className="icon-btn" aria-label="Benachrichtigungen" title="Keine Benachrichtigungen"><Icons.bell size={26} /></button>
       <div className="user-menu" onClick={() => setMenu(!menu)} role="button" tabIndex={0} aria-haspopup="menu" aria-expanded={menu}>
         <div className="avatar">{user.display_name.slice(0, 1).toUpperCase()}</div>

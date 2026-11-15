@@ -21,8 +21,41 @@ KPI_DEFINITIONS = [
     ("upcoming_contract_ends", "Anstehende Vertragsenden", "C"),
 ]
 
-# Implementierte Zähler: key -> Funktion(db) -> int. Wird in Phase C/E befüllt.
-IMPLEMENTED: dict = {}
+from datetime import date, timedelta
+
+from sqlalchemy import distinct, func, select
+
+from leventum import domain
+from leventum.models import Lease, LeaseParty, Property, Unit
+from leventum.services.leases import OPEN_END, effective_end
+
+
+def _running(db, kind):
+    today = date.today()
+    return [x for x in db.scalars(select(Lease).where(Lease.kind == kind, Lease.status.in_(domain.RUNNING_STATUS)))
+            if x.start_date <= today <= (effective_end(x) or OPEN_END)]
+
+
+def _active_tenants(db):
+    ids = {p.party_id for lease in _running(db, "sub") for p in lease.parties if p.role in ("lessee", "co_lessee")}
+    return len(ids)
+
+
+def _upcoming_ends(db):
+    today, horizon = date.today(), date.today() + timedelta(days=90)
+    return sum(1 for lease in db.scalars(select(Lease).where(Lease.status.in_(domain.RUNNING_STATUS)))
+               if (e := effective_end(lease)) is not None and today <= e <= horizon)
+
+
+# Implementierte Zähler: key -> Funktion(db) -> int
+IMPLEMENTED: dict = {
+    "properties": lambda db: db.scalar(select(func.count()).select_from(Property).where(Property.is_active.is_(True))),
+    "units": lambda db: db.scalar(select(func.count()).select_from(Unit).where(Unit.is_active.is_(True))),
+    "active_main_leases": lambda db: len(_running(db, "main")),
+    "active_subleases": lambda db: len(_running(db, "sub")),
+    "active_tenants": _active_tenants,
+    "upcoming_contract_ends": _upcoming_ends,
+}
 
 
 def build_dashboard(db: Session) -> dict:

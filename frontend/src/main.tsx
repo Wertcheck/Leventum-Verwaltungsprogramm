@@ -8,6 +8,9 @@ import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import Placeholder from "./pages/Placeholder";
 import Settings from "./pages/Settings";
+import { OwnersPage, PartyDetail, TenantsPage } from "./pages/Parties";
+import { PropertiesPage, PropertyDetail, UnitsPage } from "./pages/Properties";
+import { LeaseDetail, LeasesPage } from "./pages/Leases";
 import { NAV, isGroup, type NavLeaf } from "./nav";
 
 type State = { kind: "loading" } | { kind: "setup" } | { kind: "login" } | { kind: "ready"; user: User } | { kind: "error"; msg: string };
@@ -35,6 +38,15 @@ function App() {
         <Route element={<AppShell user={s.user} onLogout={logout} />}>
           <Route path="/" element={<Dashboard user={s.user} />} />
           <Route path="/einstellungen" element={<Settings />} />
+          <Route path="/mieter" element={<TenantsPage />} />
+          <Route path="/eigentuemer" element={<OwnersPage />} />
+          <Route path="/parteien/:id" element={<PartyDetail />} />
+          <Route path="/objekte" element={<PropertiesPage />} />
+          <Route path="/objekte/:id" element={<PropertyDetail />} />
+          <Route path="/wohneinheiten" element={<UnitsPage />} />
+          <Route path="/mietverhaeltnisse" element={<LeasesPage kind="sub" title="Mietverhältnisse" />} />
+          <Route path="/vertraege" element={<LeasesPage title="Verträge" />} />
+          <Route path="/vertraege/:id" element={<LeaseDetail />} />
           {LEAVES.map((l) => <Route key={l.path} path={l.path} element={<Placeholder title={l.label} phase={l.phase!} />} />)}
           <Route path="*" element={<Placeholder title="Seite nicht gefunden" phase="–" />} />
         </Route>

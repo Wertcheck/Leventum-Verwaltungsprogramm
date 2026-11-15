@@ -66,3 +66,20 @@ label { display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-w
 input.field { font: inherit; border: 1px solid var(--color-border); border-radius: 10px; padding: 11px 14px; color: var(--color-ink); }
 input.field:focus { outline: 2px solid var(--color-primary-soft); border-color: var(--color-primary); }
 .defs { display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; font-size: 14px; } .defs dt { font-weight: 600; } .defs dd { margin: 0; color: var(--color-ink-muted); }
+select.field { background: #fff; }
+.modal-bg { position: fixed; inset: 0; background: rgba(11, 31, 75, 0.35); display: grid; place-items: start center; padding: 6vh 20px; z-index: 50; overflow-y: auto; }
+.modal { width: 100%; max-width: 720px; display: flex; flex-direction: column; gap: 12px; }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; }
+.form-grid .full { grid-column: 1 / -1; }
+.row-link { cursor: pointer; } .row-link:hover td { background: var(--color-canvas); }
+.toolbar { display: flex; gap: 12px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+.toolbar .field { min-width: 200px; }
+.tree ul { list-style: none; margin: 4px 0 4px 18px; padding: 0 0 0 12px; border-left: 1px solid var(--color-border); }
+.tree li { padding: 4px 0; } .tree .node { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.btn.small { padding: 4px 10px; font-size: 13px; }
+a.link { color: var(--color-primary); text-decoration: none; } a.link:hover { text-decoration: underline; }
+.search-results { position: absolute; top: 52px; left: 0; right: 0; background: #fff; border: 1px solid var(--color-border); border-radius: 12px; box-shadow: var(--shadow); z-index: 20; max-height: 420px; overflow-y: auto; }
+.search-results a { display: block; padding: 10px 16px; color: var(--color-ink); text-decoration: none; border-bottom: 1px solid var(--color-border); }
+.search-results a:hover { background: var(--color-canvas); } .search-wrap { position: relative; flex: 1; max-width: 780px; }
+.badge.neutral { background: var(--color-canvas); color: var(--color-ink-muted); }
+.kv { display: grid; grid-template-columns: 200px 1fr; gap: 6px 16px; } .kv dt { color: var(--color-ink-muted); } .kv dd { margin: 0; }

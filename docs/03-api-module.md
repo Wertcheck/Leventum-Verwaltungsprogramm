@@ -23,3 +23,17 @@ Alle Endpunkte außer `GET /health` und den Setup-/Login-Endpunkten verlangen ei
 | `users`, `roles` | später | Benutzerverwaltung (Modell bereits vorhanden) | geplant |
 
 Konventionen: JSON, ISO-8601, Geld als String-Dezimal (`"1150.00"`), Fehler als `{ "detail": ..., "code": ... }`, Paginierung `limit/offset`, Optimistic Locking per `version`-Feld auf Finanz- und Vertragsdaten (Phase C/D).
+
+
+## Ergänzung Phase C (implementiert und getestet)
+| Ressource | Endpunkte |
+|---|---|
+| Parteien | `GET/POST /parties`, `GET/PATCH /parties/{id}` (Filter `role`, `q`, `active`) |
+| Objekte & Raumhierarchie | `GET/POST /properties`, `GET/PATCH /properties/{id}` (Baum Objekt→WE→Zimmer→Bett), `POST /properties/{id}/units`, `GET /units`, `PATCH /units/{id}`, `POST /units/{id}/rooms`, `POST /rooms/{id}/beds` |
+| Vermietungseinheiten | `GET/POST /rentable-units` (Ebene Objekt/Wohneinheit/Zimmer/Bett, idempotent) |
+| Verträge | `GET/POST /leases`, `GET/PATCH /leases/{id}`, `GET /leases/{id}/validation`, `POST …/terms`, `…/utility-agreements`, `…/notes`, `…/legal-review`, `…/activate`, `…/terminate`, `…/cancel`; `GET /lease-types` |
+| Mieterübersicht | `GET /tenants` (Zahlungsstatus bis Phase D immer `null`) |
+| Nebenkosten (Ebene A + Vergleich) | `GET/POST /utility-statements`, `GET /utility-statements/{id}` (inkl. berechnetem Ergebnis), `POST …/lines`, `PUT …/prepayments`, `POST …/status`, `GET …/allocation`, `GET …/comparison`; `GET /cost-types` |
+| Suche | `GET /search?q=` (Parteien, Objekte, Wohneinheiten, Verträge) |
+
+Geldbeträge und Flächen sind JSON-Strings mit 2 Nachkommastellen. Validierungsfehler beim Aktivieren: HTTP 422 mit `detail.details.{errors,warnings,hints}`. Rechte: `master:read/write` (Stammdaten/Verträge), `finance:read/write` (Nebenkosten).

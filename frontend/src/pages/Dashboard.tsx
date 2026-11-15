@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type BackupList, type DashboardData, type User } from "../lib/api";
-import { Card, EmptyState, KpiCard, PageHeader } from "../components/ui";
+import { Link } from "react-router-dom";
+import { Badge, Card, EmptyState, KpiCard, PageHeader } from "../components/ui";
 import { Icons } from "../components/icons";
 
 const ICONS: Record<string, keyof typeof Icons> = {
@@ -13,8 +14,10 @@ export default function Dashboard({ user }: { user: User }) {
   const [data, setData] = useState<DashboardData | null>(null);
   const [backup, setBackup] = useState<BackupList | null>(null);
   const [error, setError] = useState("");
+  const [tenants, setTenants] = useState<{ party_id: number; name: string; spaces?: string[]; lease_status?: string }[]>([]);
   useEffect(() => {
     api<DashboardData>("/dashboard").then(setData).catch((e) => setError(e.message));
+    api<{ items: typeof tenants }>("/tenants").then((r) => setTenants(r.items.slice(0, 5))).catch(() => undefined);
     api<BackupList>("/system/backups").then(setBackup).catch(() => undefined);
   }, []);
   return (
@@ -30,7 +33,8 @@ export default function Dashboard({ user }: { user: User }) {
       <div className="grid two-col">
         <Card>
           <div className="card-head"><h2>Mieter</h2></div>
-          <EmptyState title="Noch keine Mieter erfasst">Die Mieterverwaltung wird in Phase C umgesetzt.</EmptyState>
+          {tenants.length === 0 ? <EmptyState title="Noch keine Mieter erfasst">Mieter legen Sie unter „Stammdaten → Mieter“ an.</EmptyState> : (
+            <table><tbody>{tenants.map((t, i) => <tr key={i}><td><Link className="link" to={`/parteien/${t.party_id}`}>{t.name}</Link></td><td>{t.spaces?.join("; ") ?? "–"}</td><td>{t.lease_status && <Badge tone={t.lease_status === "active" ? "ok" : "warn"}>{t.lease_status === "active" ? "Aktiv" : t.lease_status}</Badge>}</td></tr>)}</tbody></table>)}
         </Card>
         <Card>
           <div className="card-head"><h2>Aufgaben &amp; Hinweise</h2></div>

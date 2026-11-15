@@ -11,7 +11,12 @@
 | E | Aufgaben, Reparaturen, Dokumente, Kommunikation, Historie, Erinnerungen, Dashboard vollständig | Upload-/Download-Tests, Verknüpfungstests |
 | F | E2E-Tests, Sicherheitsprüfung, PostgreSQL-Lauf, Backup/Restore-Test, Windows-Build/Installer | Läuft auf Windows (nur dort prüfbar) |
 
-## Offene fachliche Entscheidungen (blockieren die genannten Phasen **nicht**, dürfen aber nicht stillschweigend angenommen werden)
+## Beantwortet nach Phase B
+- **#1 Zimmer-/Bettenvermietung:** ja, zusätzlich Monteurwohnungen, Boardinghouse, befristet/langfristig, Ganzes Objekt → umgesetzt in [`06-datenmodell-v2.md`](06-datenmodell-v2.md).
+- **#2 Nebenkosten Untermiete:** je Vertrag konfigurierbar (Pauschale, Vorauszahlung mit Abrechnung, individuell, enthalten) → umgesetzt.
+- Weiterhin offen, neu und präzisiert: siehe [`07-annahmen-und-rechtsfragen.md`](07-annahmen-und-rechtsfragen.md).
+
+## Offene fachliche Entscheidungen (Stand Phase A; Tabelle unten teilweise überholt) (blockieren die genannten Phasen **nicht**, dürfen aber nicht stillschweigend angenommen werden)
 
 | # | Frage | Betrifft | Vorläufiges Vorgehen |
 |---|---|---|---|

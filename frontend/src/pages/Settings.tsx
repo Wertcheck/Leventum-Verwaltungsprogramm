@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError, type BackupList } from "../lib/api";
 import { Card, PageHeader } from "../components/ui";
+import { useFetch } from "../lib/hooks";
 
 export default function Settings() {
   const [b, setB] = useState<BackupList | null>(null);
@@ -29,9 +30,20 @@ export default function Settings() {
       setMsg({ tone: "warn", text: `Wiederhergestellt. Sicherheits-Backup: ${r.safety_backup}. Bitte laden Sie die Anwendung neu und melden Sie sich erneut an.` });
     });
   };
+  const parties = useFetch<{ items: { id: number; display_name: string; is_own_organization: boolean }[] }>("/parties");
+  const own = parties.data?.items.find((p) => p.is_own_organization);
+  const [orgName, setOrgName] = useState("Leventum Real Estate");
   return (
     <>
-      <PageHeader title="Einstellungen" subtitle="Backup und Wiederherstellung" />
+      <PageHeader title="Einstellungen" subtitle="Eigene Organisation, Backup und Wiederherstellung" />
+      <Card>
+        <div className="card-head"><h2>Eigene Organisation</h2></div>
+        <p className="muted" style={{ marginBottom: 12 }}>Leventum tritt als Mieter (Hauptmietvertrag) und als Vermieter (Untermietvertrag) auf. Diese Partei wird dafür benötigt.</p>
+        {own ? <div className="alert ok">Angelegt: {own.display_name}</div> : parties.data && (
+          <div className="toolbar"><input className="field" value={orgName} onChange={(e) => setOrgName(e.target.value)} aria-label="Firmenname" />
+            <button className="btn primary" onClick={() => api("/parties", { method: "POST", json: { kind: "company", company_name: orgName, is_own_organization: true } }).then(parties.reload)}>Anlegen</button></div>)}
+      </Card>
+      <div style={{ height: 20 }} />
       <Card>
         <div className="card-head"><h2>Backups</h2><button className="btn primary" onClick={create} disabled={busy}>Backup jetzt erstellen</button></div>
         <p className="muted" style={{ marginBottom: 12 }}>Ein Backup enthält Datenbank und Dokumente gemeinsam. Empfehlung: Backups zusätzlich auf ein externes Laufwerk kopieren und BitLocker aktivieren.</p>

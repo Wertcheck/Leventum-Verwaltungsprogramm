@@ -9,14 +9,14 @@ export const isGroup = (e: NavEntry): e is NavGroup => "children" in e;
 export const NAV: NavEntry[] = [
   { path: "/", label: "Dashboard", icon: "home" },
   { label: "Stammdaten", icon: "users", children: [
-    { path: "/mieter", label: "Mieter", icon: "user", phase: "C" },
-    { path: "/eigentuemer", label: "Eigentümer & Vermieter", icon: "key", phase: "C" },
-    { path: "/objekte", label: "Objekte", icon: "building", phase: "C" },
-    { path: "/wohneinheiten", label: "Wohneinheiten", icon: "door", phase: "C" },
+    { path: "/mieter", label: "Mieter", icon: "user" },
+    { path: "/eigentuemer", label: "Eigentümer & Vermieter", icon: "key" },
+    { path: "/objekte", label: "Objekte", icon: "building" },
+    { path: "/wohneinheiten", label: "Wohneinheiten", icon: "door" },
   ] },
   { label: "Verträge", icon: "contract", children: [
-    { path: "/mietverhaeltnisse", label: "Mietverhältnisse", icon: "key", phase: "C" },
-    { path: "/vertraege", label: "Verträge", icon: "file", phase: "C" },
+    { path: "/mietverhaeltnisse", label: "Mietverhältnisse", icon: "key" },
+    { path: "/vertraege", label: "Verträge", icon: "file" },
   ] },
   { label: "Finanzen", icon: "euro", children: [
     { path: "/finanzen", label: "Finanzen", icon: "euro", phase: "D" },

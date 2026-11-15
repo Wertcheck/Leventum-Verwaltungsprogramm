@@ -50,7 +50,7 @@ def test_backup_contains_db_docs_manifest_and_verifies(app, settings):
     names = zipfile.ZipFile(path).namelist()
     assert {"database.sqlite3", "manifest.json", "documents/ab/a.pdf"} <= set(names)
     res = b.verify_backup(path)
-    assert res.ok and res.manifest["schema_revision"] == "0001"
+    assert res.ok and res.manifest["schema_revision"] == "0002"
 
 
 def test_verify_detects_tampering(app, settings, tmp_path):

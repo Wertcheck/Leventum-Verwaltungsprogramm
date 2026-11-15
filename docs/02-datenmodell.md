@@ -1,5 +1,7 @@
 # 02 – Fachliches Datenmodell und Datenbankstruktur (Phase A)
 
+> **Überarbeitet in Phase C:** Die Abschnitte 3 und 4 (Stammdaten, Verträge) sind durch [`06-datenmodell-v2.md`](06-datenmodell-v2.md) ersetzt (Raumhierarchie, Vermietungseinheit, mehrere Vertragsparteien, getrennte Nebenkostenvereinbarung). Abschnitt 5 (Finanzen) bleibt Entwurf für Phase D und wird dort an v2 angepasst.
+
 **Status: Entwurf [geplant].** In Phase B ist nur der Abschnitt „Fundament“ als Migration umgesetzt (Benutzer, Rollen, Sitzungen, Audit, Einstellungen). Alle übrigen Tabellen folgen in den Phasen C–E und werden dort per Alembic angelegt.
 
 ## 1. Fachliche Grundidee Rent-to-Rent

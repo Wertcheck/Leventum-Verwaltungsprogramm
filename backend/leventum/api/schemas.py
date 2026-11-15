@@ -1,0 +1,229 @@
+from __future__ import annotations
+
+from datetime import date
+from decimal import Decimal
+from typing import Annotated, Literal
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from leventum import domain
+
+Amount = Annotated[Decimal, Field(ge=0, decimal_places=2, max_digits=14)]
+Pos = Annotated[Decimal, Field(ge=0, decimal_places=2, max_digits=12)]
+
+
+class In(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class PartyIn(In):
+    kind: Literal["person", "company"]
+    display_name: str | None = Field(None, max_length=200)
+    first_name: str | None = Field(None, max_length=100)
+    last_name: str | None = Field(None, max_length=100)
+    company_name: str | None = Field(None, max_length=200)
+    birth_date: date | None = None
+    email: str | None = Field(None, max_length=200)
+    phone: str | None = Field(None, max_length=60)
+    street: str | None = Field(None, max_length=200)
+    postal_code: str | None = Field(None, max_length=20)
+    city: str | None = Field(None, max_length=100)
+    country: str = Field("DE", max_length=2)
+    iban: str | None = Field(None, max_length=40)
+    notes: str | None = None
+    is_own_organization: bool = False
+    roles: list[Literal["owner", "landlord", "tenant", "service_provider"]] = []
+
+
+class PartyPatch(In):
+    display_name: str | None = Field(None, max_length=200)
+    first_name: str | None = None
+    last_name: str | None = None
+    company_name: str | None = None
+    birth_date: date | None = None
+    email: str | None = None
+    phone: str | None = None
+    street: str | None = None
+    postal_code: str | None = None
+    city: str | None = None
+    iban: str | None = None
+    notes: str | None = None
+    is_active: bool | None = None
+    roles: list[Literal["owner", "landlord", "tenant", "service_provider"]] | None = None
+
+
+class PropertyIn(In):
+    name: str = Field(min_length=1, max_length=200)
+    property_type: Literal["mehrfamilienhaus", "wohnung", "einfamilienhaus", "gewerbeeinheit", "sonstige"]
+    street: str | None = None
+    postal_code: str | None = None
+    city: str | None = None
+    owner_party_id: int | None = None
+    year_built: int | None = Field(None, ge=1000, le=2100)
+    total_area: Pos | None = None
+    heating_type: str | None = None
+    equipment: str | None = None
+    notes: str | None = None
+
+
+class PropertyPatch(PropertyIn):
+    name: str | None = Field(None, min_length=1, max_length=200)  # type: ignore[assignment]
+    property_type: Literal["mehrfamilienhaus", "wohnung", "einfamilienhaus", "gewerbeeinheit", "sonstige"] | None = None  # type: ignore[assignment]
+    is_active: bool | None = None
+
+
+class UnitIn(In):
+    unit_number: str = Field(min_length=1, max_length=40)
+    floor: str | None = None
+    living_area: Pos | None = None
+    rooms_count: int | None = Field(None, ge=0)
+    equipment: str | None = None
+    manual_status: Literal["reserved", "renovation", "unavailable"] | None = None
+    notes: str | None = None
+
+
+class UnitPatch(In):
+    floor: str | None = None
+    living_area: Pos | None = None
+    rooms_count: int | None = Field(None, ge=0)
+    equipment: str | None = None
+    manual_status: Literal["reserved", "renovation", "unavailable"] | None = None
+    notes: str | None = None
+    is_active: bool | None = None
+
+
+class RoomIn(In):
+    name: str = Field(min_length=1, max_length=80)
+    area: Pos | None = None
+    notes: str | None = None
+
+
+class BedIn(In):
+    label: str = Field(min_length=1, max_length=80)
+    notes: str | None = None
+
+
+class RentableIn(In):
+    property_id: int
+    unit_id: int | None = None
+    room_id: int | None = None
+    bed_id: int | None = None
+    name: str | None = None
+
+
+class LeasePartyIn(In):
+    party_id: int
+    role: Literal["lessor", "lessee", "co_lessee", "occupant", "guarantor"]
+
+
+class LeaseIn(In):
+    kind: Literal["main", "sub"]
+    lease_type_id: int
+    start_date: date
+    end_date: date | None = None
+    parties: list[LeasePartyIn]
+    rentable_unit_ids: list[int]
+    contract_number: str | None = None
+    is_fixed_term: bool = False
+    fixed_term_reason: str | None = None
+    notice_period_months: int | None = Field(None, ge=0)
+    notice_note: str | None = None
+    subletting_permitted: bool | None = None
+    deposit_amount: Amount | None = None
+    payment_rhythm: Literal["monthly", "quarterly", "yearly", "on_demand"] = "monthly"
+    payment_due_day: int = Field(1, ge=1, le=31)
+    intended_use: str | None = Field(None, max_length=80)
+    intended_use_note: str | None = None
+    legal_basis_ref: str | None = None
+    legal_basis_note: str | None = None
+    parent_lease_id: int | None = None
+    coverage_override_reason: str | None = None
+    internal_notes: str | None = None
+
+
+class LeasePatch(In):
+    lease_type_id: int | None = None
+    contract_number: str | None = None
+    start_date: date | None = None
+    end_date: date | None = None
+    is_fixed_term: bool | None = None
+    fixed_term_reason: str | None = None
+    notice_period_months: int | None = Field(None, ge=0)
+    notice_note: str | None = None
+    subletting_permitted: bool | None = None
+    deposit_amount: Amount | None = None
+    payment_rhythm: Literal["monthly", "quarterly", "yearly", "on_demand"] | None = None
+    payment_due_day: int | None = Field(None, ge=1, le=31)
+    intended_use: str | None = None
+    intended_use_note: str | None = None
+    coverage_override_reason: str | None = None
+    internal_notes: str | None = None
+
+
+class TermIn(In):
+    valid_from: date
+    valid_to: date | None = None
+    base_rent: Amount
+    other_charges: Amount = Decimal(0)
+    rent_period: Literal["month", "day"] = "month"
+    note: str | None = None
+
+
+class UtilityAgreementIn(In):
+    valid_from: date
+    valid_to: date | None = None
+    mode: Literal["flat_rate", "prepayment", "included", "individual", "none"]
+    monthly_amount: Amount | None = None
+    settlement_agreed: bool | None = None
+    description: str | None = None
+    legal_note: str | None = None
+
+
+class NoteIn(In):
+    kind: Literal["note", "review", "hint"] = "note"
+    text: str = Field(min_length=1)
+
+
+class LegalReviewIn(In):
+    status: Literal["not_reviewed", "in_review", "reviewed"]
+    basis_ref: str | None = Field(None, max_length=200)
+    basis_note: str | None = None
+
+
+class TerminateIn(In):
+    terminated_on: date
+    effective_on: date
+
+
+class CancelIn(In):
+    reason: str = Field(min_length=1)
+
+
+class StatementIn(In):
+    main_lease_id: int
+    period_start: date
+    period_end: date
+    unit_ids: list[int]
+    statement_date: date | None = None
+    received_on: date | None = None
+    stated_balance: Annotated[Decimal, Field(decimal_places=2, max_digits=14)] | None = None
+    notes: str | None = None
+
+
+class LineIn(In):
+    cost_type_id: int
+    amount: Annotated[Decimal, Field(decimal_places=2, max_digits=14)]
+    allocation_key: Literal["area", "equal", "persons", "consumption", "custom", "none"] = "none"
+    allocable_status: Literal["unreviewed", "allocable", "not_allocable"] = "unreviewed"
+    description: str | None = Field(None, max_length=300)
+    note: str | None = None
+    weights: dict[int, Pos] | None = None
+
+
+class PrepaymentIn(In):
+    amount: Amount
+    source: Literal["agreed_calculated", "statement", "manual"]
+
+
+class StatusIn(In):
+    status: Literal["draft", "captured", "reviewed"]

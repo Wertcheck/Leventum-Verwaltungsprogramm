@@ -21,8 +21,9 @@ class Base(DeclarativeBase):
     metadata = MetaData(naming_convention=NAMING)
 
 
-class Money(TypeDecorator):
-    """Decimal mit 2 Nachkommastellen, gespeichert als BIGINT (Cent). Kein float, DB-unabhängig."""
+class Decimal2(TypeDecorator):
+    """Decimal mit 2 Nachkommastellen, gespeichert als BIGINT (x100). Kein float, DB-unabhängig.
+    Verwendet für Geldbeträge (Money) und Flächen/Gewichte."""
 
     impl = BigInteger
     cache_ok = True
@@ -41,6 +42,10 @@ class Money(TypeDecorator):
         if value is None:
             return None
         return (Decimal(int(value)) / self.SCALE).quantize(Decimal("0.01"))
+
+
+Money = Decimal2  # Geldbeträge (Cent-genau)
+Area = Decimal2   # Flächen / Verteilungsgewichte mit 2 Nachkommastellen
 
 
 def utcnow() -> datetime:
