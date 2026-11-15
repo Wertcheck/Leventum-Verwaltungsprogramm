@@ -46,6 +46,10 @@ def main() -> None:
     else:
         import webview  # type: ignore  # optionale Abhängigkeit: pip install .[desktop]
 
+        try:  # Downloads (Backup, Dokumente) im eingebetteten WebView2 zulassen – Verhalten unter Windows ungetestet
+            webview.settings["ALLOW_DOWNLOADS"] = True
+        except Exception:  # ältere pywebview-Version ohne diese Einstellung
+            pass
         webview.create_window("Leventum Verwaltung", url, width=1536, height=1024, min_size=(1100, 700))
         webview.start()
     server.should_exit = True
