@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "deny": [
+      "Edit(//home/user/lexono/**)",
+      "Write(//home/user/lexono/**)",
+      "NotebookEdit(//home/user/lexono/**)"
+    ]
+  }
+}
