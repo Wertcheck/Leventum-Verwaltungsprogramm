@@ -22,5 +22,7 @@ Die Hauptsitzung ist der Orchestrator (`.claude/agents/lead-architect.md`): Aufg
 (cd frontend && npm test && npm run build)                           # Frontend-Tests und Build
 (cd frontend && NODE_PATH=$(npm root -g) npm run e2e)                # Browser-E2E (Chromium), startet eigenen Server
 python scripts/validate_agent_system.py                              # Selbstprüfung der Agenten-/Skill-Struktur
+scripts/ro_run.sh <befehl…>                                          # Read-only-Ausführung (Prüf-Agenten; Linux, root)
+python scripts/check_file_set.py snapshot|check|overlap …            # Dateimengen-Kontrolle für delegierte Arbeit
 ```
 Wichtige Dokumente: `docs/ABSCHLUSSBERICHT_MASTER_REVIEW.md` (Ist-Stand/Einschränkungen), `docs/04-sicherheit-backup.md`, `docs/WINDOWS_TESTPLAN.md`, `docs/07-annahmen-und-rechtsfragen.md`.

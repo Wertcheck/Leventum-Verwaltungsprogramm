@@ -20,7 +20,8 @@ Stand: erstellt, mit Selbstprüfung (`python scripts/validate_agent_system.py`) 
 | `backend-engineer` | Read, Grep, Glob, Bash, Edit, Write | backend-development, api-testing, data-integrity-review |
 | `frontend-ui-engineer` | wie oben | frontend-development, ui-ux-review, e2e-testing |
 | `domain-finance-engineer` | wie oben | financial-calculations, rental-contract-domain, operating-cost-accounting, data-integrity-review |
-| `security-privacy-engineer` | Read, Grep, Glob, Bash (**ohne Schreibwerkzeuge**) | security-review, privacy-review, backup-restore, dependency-audit |
+| `security-privacy-engineer` | Read, Grep, Glob (**kein Bash, kein Edit/Write**) | security-review, privacy-review, backup-restore, dependency-audit |
+| `independent-reviewer` (neu, Phase I) | Read, Grep, Glob, Bash nur über `scripts/ro_run.sh` (Hook), **kein Edit/Write** | regression-testing, api-testing, data-integrity-review, financial-calculations |
 | `qa-test-engineer` | Read, Grep, Glob, Bash, Edit, Write (nur Testcode per Regel) | api-testing, e2e-testing, regression-testing, data-integrity-review |
 | `database-architect` | Read, Grep, Glob, Bash, Edit, Write | database-migrations, data-integrity-review, backup-restore |
 | `windows-release-engineer` | wie oben | windows-desktop-qa, release-management, dependency-audit |
@@ -42,3 +43,7 @@ Mehrfachnutzung von Skills vermeidet Duplikate (z. B. `data-integrity-review` in
 
 ## Erweiterung
 Neuer Agent: Datei `.claude/agents/<name>.md` (Frontmatter + Pflichtabschnitte), Skills referenzieren, Tabelle oben und Review-Matrix ergänzen, `REQUIRED_AGENTS` im Skript erweitern, Skript ausführen. Neuer Skill: Verzeichnis + `SKILL.md` mit 10 Abschnitten, mindestens einem Agenten zuordnen. Regeländerungen nur bewusst und mit Eintrag in `docs/decisions/`.
+
+
+## Stand Phase I
+Sicherheitsmechanismen, reale Tests und Grenzen: `docs/PHASE_I_AGENT_ARCHITECTURE.md`. Die früheren Aussagen dieses Dokuments zu „Skills werden nicht geladen“ und „Security-Agent ohne Schreibwerkzeuge (Bash vorhanden)“ sind dort überholt.
