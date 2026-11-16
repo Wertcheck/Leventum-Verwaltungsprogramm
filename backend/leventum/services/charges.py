@@ -118,7 +118,7 @@ def receivable_position(db: Session, as_of: date) -> dict:
             .group_by(PaymentAllocation.charge_id).subquery())
     rows = db.execute(select(Charge.lease_id, Charge.amount, Charge.due_date, paid.c.paid).outerjoin(paid, paid.c.cid == Charge.id)
                       .where(Charge.direction == "receivable", Charge.voided_at.is_(None)))
-    total, overdue = Decimal(0), 0
+    total, overdue, overdue_total = Decimal(0), 0, Decimal(0)
     by_lease: dict[int, list[tuple[date, Decimal]]] = {}
     for lease_id, amount, due, p in rows:
         rest = q(Decimal(amount) - (Decimal(p) if p is not None else Decimal(0)))
@@ -126,8 +126,10 @@ def receivable_position(db: Session, as_of: date) -> dict:
             total += rest
             if due < as_of:
                 overdue += 1
+                overdue_total += rest
                 by_lease.setdefault(lease_id, []).append((due, rest))
-    return {"open_total": q(total), "overdue_count": overdue, "overdue_by_lease": by_lease}  # by_lease: Detail für Hinweise, gleiche Semantik
+    # overdue_total: EUR-Summe der offenen Rest-Beträge überfälliger Forderungen (Fälligkeit < Stichtag); immer <= open_total
+    return {"open_total": q(total), "overdue_count": overdue, "overdue_total": q(overdue_total), "overdue_by_lease": by_lease}  # by_lease: Detail für Hinweise, gleiche Semantik
 
 
 def period_months(rhythm: str, first_month: date, through_month: date):
@@ -261,11 +263,12 @@ def create_manual_charge(db: Session, actor_id: int | None, *, lease_id: int, am
 
 
 def arrears(db: Session, lease_id: int, today: date | None = None) -> dict:
-    """Zahlungsstatus eines Untermietvertrags: überfällige Forderungen, die nach Teilzahlungen noch offen sind."""
+    """Zahlungsstatus eines Untermietvertrags: überfällige Forderungen, die nach Teilzahlungen noch offen sind.
+    Zahlungen wirken erst ab ihrem Buchungsdatum (booking_date <= Stichtag `today`, Phase I3)."""
     today = today or date.today()
     total, n = Decimal("0.00"), 0
     for c in db.scalars(select(Charge).where(Charge.lease_id == lease_id, Charge.direction == "receivable", Charge.voided_at.is_(None), Charge.due_date < today)):
-        o = open_amount(db, c)
+        o = open_amount(db, c, today)
         if o > 0:
             total += o
             n += 1
@@ -273,12 +276,12 @@ def arrears(db: Session, lease_id: int, today: date | None = None) -> dict:
 
 
 def arrears_bulk(db: Session, lease_ids: list[int], today: date | None = None) -> dict[int, dict]:
-    """Wie `arrears`, aber für viele Verträge mit zwei Abfragen (statt einer je Vertrag)."""
+    """Wie `arrears`, aber für viele Verträge mit zwei Abfragen (statt einer je Vertrag); gleiche Stichtagssemantik (booking_date <= `today`)."""
     today = today or date.today()
     out = {i: {"status": "current", "amount": Decimal("0.00"), "count": 0} for i in lease_ids}
     if not lease_ids:
         return out
-    alloc = dict(db.execute(select(PaymentAllocation.charge_id, func.sum(PaymentAllocation.amount)).where(PaymentAllocation.charge_id.is_not(None)).group_by(PaymentAllocation.charge_id)).all())
+    alloc = allocated_by_charge(db, None, today)
     for c in db.scalars(select(Charge).where(Charge.lease_id.in_(lease_ids), Charge.direction == "receivable", Charge.voided_at.is_(None), Charge.due_date < today)):
         o = q(c.amount - Decimal(alloc.get(c.id, 0)))
         if o > 0:

@@ -511,7 +511,7 @@ def test_contract_end_total_equals_sum_over_many_as_of(bare, auth_client):
     end_lease(w, d(-20), start=d(-240), unit="room1")
     end_lease(w, d(35), start=d(-30), unit="room2")
     w.db.commit()
-    for off in (-260, -200, -100, -25, -10, 0, 10):
+    for off in (-260, -200, -100, -25, -10, -1, 0):  # kein Zukunftsstichtag (würde 422 liefern, siehe Stichtag-Entscheidung)
         m, s, t = ends(auth_client, as_of=iso(off))
         assert t == m + s, off
 

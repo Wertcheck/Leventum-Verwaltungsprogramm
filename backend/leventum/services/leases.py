@@ -43,10 +43,14 @@ def contract_end_due(lease: Lease, today: date, days: int) -> date | None:
     return end if end is not None and today <= end <= today + timedelta(days=days) else None
 
 
-def upcoming_ends(db: Session, today: date, days: int) -> list[tuple[Lease, date]]:
-    """Alle Verträge (Haupt- und Untermiete) mit anstehendem Ende laut contract_end_due – einzige Quelle für Dashboard und Hinweise."""
+def upcoming_ends(db: Session, today: date, days: int, kind: str | None = None) -> list[tuple[Lease, date]]:
+    """Alle Verträge (Haupt- und Untermiete) mit anstehendem Ende laut contract_end_due – einzige Quelle für Dashboard und Hinweise.
+    `kind` ('main' | 'sub') beschränkt auf eine Vertragsart (getrennte Dashboard-KPIs); ohne Angabe beide."""
     out = []
-    for lease in db.scalars(select(Lease).where(Lease.status.in_(domain.RUNNING_STATUS))):
+    stmt = select(Lease).where(Lease.status.in_(domain.RUNNING_STATUS))
+    if kind is not None:
+        stmt = stmt.where(Lease.kind == kind)
+    for lease in db.scalars(stmt):
         end = contract_end_due(lease, today, days)
         if end is not None:
             out.append((lease, end))

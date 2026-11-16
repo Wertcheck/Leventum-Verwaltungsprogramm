@@ -116,10 +116,10 @@ def _party_hit(p: Party, t: BankTransaction) -> list[tuple[int, str]]:
     return hits
 
 
-def _fifo(db: Session, charges: list[Charge], amount: Decimal) -> tuple[list[dict], Decimal]:
+def _fifo(db: Session, charges: list[Charge], amount: Decimal, as_of: date | None = None) -> tuple[list[dict], Decimal]:
     plan, left = [], amount
     for c in sorted(charges, key=lambda c: (c.due_date, c.id)):
-        o = open_amount(db, c)
+        o = open_amount(db, c, as_of)
         if o <= 0 or left <= 0:
             continue
         take = min(o, left)
@@ -129,8 +129,10 @@ def _fifo(db: Session, charges: list[Charge], amount: Decimal) -> tuple[list[dic
 
 
 def suggest(db: Session, t: BankTransaction) -> list[dict]:
-    """Rein beratend. Liefert Kandidaten mit Punktzahl und Gründen; es wird nichts gebucht."""
+    """Rein beratend. Liefert Kandidaten mit Punktzahl und Gründen; es wird nichts gebucht.
+    Offene Beträge gelten zum Stichtag heute: Zahlungen mit Buchungsdatum in der Zukunft mindern sie nicht (Phase I3)."""
     out: list[dict] = []
+    today = date.today()
     ref = _n(t.reference)
     amount = abs(t.amount)
     incoming = t.amount > 0
@@ -148,7 +150,7 @@ def suggest(db: Session, t: BankTransaction) -> list[dict]:
         if not score:
             continue
         charges = db.scalars(select(Charge).where(Charge.lease_id == lease.id, Charge.voided_at.is_(None))).all()
-        plan, left = _fifo(db, charges, amount)
+        plan, left = _fifo(db, charges, amount, today)
         if not plan:
             continue
         if left == 0:
@@ -156,8 +158,9 @@ def suggest(db: Session, t: BankTransaction) -> list[dict]:
             reasons.append("Betrag deckt offene Sollstellungen exakt")
         month_total = {}
         for c in charges:
-            if open_amount(db, c) > 0:
-                month_total[c.period_start] = month_total.get(c.period_start, Decimal(0)) + open_amount(db, c)
+            o_c = open_amount(db, c, today)
+            if o_c > 0:
+                month_total[c.period_start] = month_total.get(c.period_start, Decimal(0)) + o_c
         if amount in month_total.values():
             score += 10
             reasons.append("Betrag entspricht einem Monatssoll")

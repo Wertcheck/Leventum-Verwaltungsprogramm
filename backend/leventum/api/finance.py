@@ -15,16 +15,18 @@ from leventum.api.master import js, ser
 from leventum.config import Settings
 from leventum.models import (AppUser, BankAccount, BankImport, BankTransaction, Charge, Deposit, Document, DocumentLink, DunningNotice, Invoice, Lease,
                              LeaseAllocationWeight, Payment, Unit)
-from leventum.services import bank as B, charges as C, deposits as D, documents as DOC, dunning as DN, economics as E, payments as P
+from leventum.services import bank as B, charges as C, deposits as D, documents as DOC, dunning as DN, economics as E, payments as P, stichtag as ST
 from leventum.services.errors import ServiceError
 from leventum.services import master as M
 from leventum.services.master import get_or_404
+from leventum.services.utility import q
 from leventum.storage import LocalFileStore
 
 router = APIRouter()
 FR = Depends(require("finance:read"))
 FW = Depends(require("finance:write"))
 UP_LIMIT = 6 * 1024 * 1024
+ST_LIMITS = ST.LIMITATIONS_RECEIVABLES
 
 
 def _store(settings: Settings) -> LocalFileStore:
@@ -36,13 +38,25 @@ def _dump(m, **kw):
 
 
 # --- Sollstellungen --------------------------------------------------------------------------------------------------------------
-def charge_out(db: Session, c: Charge) -> dict:
-    return {**ser(c), "lease_label": M.lease_title(db, db.get(Lease, c.lease_id)), "open_amount": js(C.open_amount(db, c)) if not c.voided_at else None, "allocated": js(C.allocated(db, c.id)),
-            "status": "voided" if c.voided_at else ("paid" if C.open_amount(db, c) <= 0 else "partial" if C.allocated(db, c.id) > 0 else "open")}
+def charge_out(db: Session, c: Charge, as_of: date | None = None, paid: dict | None = None) -> dict:
+    """Forderung mit offenem Betrag/Status zum Stichtag `as_of` (None = heute): Zahlungen wirken erst ab ihrem Buchungsdatum (booking_date <= Stichtag).
+    `paid`: vorberechnete {charge_id: Summe} (C.allocated_by_charge) gegen N+1; sonst Einzelabfrage."""
+    day = as_of or date.today()
+    alloc = (paid.get(c.id, Decimal("0.00")) if paid is not None else C.allocated(db, c.id, day))
+    open_ = q(c.amount - alloc)
+    return {**ser(c), "lease_label": M.lease_title(db, db.get(Lease, c.lease_id)), "open_amount": js(open_) if not c.voided_at else None, "allocated": js(alloc),
+            "status": "voided" if c.voided_at else ("paid" if open_ <= 0 else "partial" if alloc > 0 else "open")}
+
+
+def _payment_out(db: Session, p: Payment) -> dict:
+    """Zahlung mit Kennzeichen `is_future_dated` (Buchungsdatum > heute): wirkt in allen Ansichten erst ab Buchungsdatum."""
+    return {**js(P.payment_view(db, p)), "is_future_dated": p.booking_date > date.today()}
 
 
 @router.get("/charges", dependencies=[FR])
-def charges_list(lease_id: int | None = None, direction: str | None = None, status: str | None = None, month: str | None = None, db: Session = Depends(get_db)):
+def charges_list(lease_id: int | None = None, direction: str | None = None, status: str | None = None, month: str | None = None,
+                 as_of: str | None = Query(default=None, description="Stichtag (JJJJ-MM-TT, nicht in der Zukunft); ohne Angabe heute"), db: Session = Depends(get_db)):
+    st = ST.resolve(as_of)
     stmt = select(Charge).order_by(Charge.due_date.desc(), Charge.id.desc())
     if lease_id:
         stmt = stmt.where(Charge.lease_id == lease_id)
@@ -51,10 +65,12 @@ def charges_list(lease_id: int | None = None, direction: str | None = None, stat
     if month:
         y, m = (int(x) for x in month.split("-"))
         stmt = stmt.where(Charge.period_start == date(y, m, 1))
-    rows = [charge_out(db, c) for c in db.scalars(stmt.limit(1000))]
+    charges = list(db.scalars(stmt.limit(1000)))
+    paid = C.allocated_by_charge(db, [c.id for c in charges], st.as_of)
+    rows = [charge_out(db, c, st.as_of, paid) for c in charges]
     if status:
-        rows = [r for r in rows if r["status"] == status or (status == "overdue" and r["status"] in ("open", "partial") and r["due_date"] < date.today().isoformat())]
-    return {"items": rows}
+        rows = [r for r in rows if r["status"] == status or (status == "overdue" and r["status"] in ("open", "partial") and r["due_date"] < st.as_of.isoformat())]
+    return {"items": rows, "stichtag": ST.meta("charges", st, historical_supported=True, limitations=ST_LIMITS)}
 
 
 @router.post("/charges/preview", dependencies=[FR])
@@ -94,7 +110,7 @@ def payments_list(direction: str | None = None, db: Session = Depends(get_db)):
     stmt = select(Payment).order_by(Payment.booking_date.desc(), Payment.id.desc())
     if direction:
         stmt = stmt.where(Payment.direction == direction)
-    return {"items": [js(P.payment_view(db, p)) for p in db.scalars(stmt.limit(500))]}
+    return {"items": [_payment_out(db, p) for p in db.scalars(stmt.limit(500))]}
 
 
 @router.post("/payments", dependencies=[FW], status_code=201)
@@ -102,28 +118,28 @@ def payments_create(body: S.PaymentIn, db: Session = Depends(get_db), user: AppU
     d = _dump(body, exclude={"allocations"})
     p = P.create_payment(db, user.id, allocations=[a.model_dump() for a in body.allocations], **d)
     db.commit()
-    return js(P.payment_view(db, p))
+    return _payment_out(db, p)
 
 
 @router.post("/payments/{pid}/allocations", dependencies=[FW], status_code=201)
 def payments_allocate(pid: int, body: S.AllocationIn, db: Session = Depends(get_db), user: AppUser = Depends(current_user)):
     P.allocate(db, user.id, pid, charge_id=body.charge_id, invoice_id=body.invoice_id, amount=body.amount)
     db.commit()
-    return js(P.payment_view(db, get_or_404(db, Payment, pid, "Zahlung")))
+    return _payment_out(db, get_or_404(db, Payment, pid, "Zahlung"))
 
 
 @router.post("/payments/{pid}/deallocate", dependencies=[FW])
 def payments_deallocate(pid: int, body: S.DeallocIn, db: Session = Depends(get_db), user: AppUser = Depends(current_user)):
     P.deallocate(db, user.id, pid, charge_id=body.charge_id, invoice_id=body.invoice_id, amount=body.amount, reason=body.reason)
     db.commit()
-    return js(P.payment_view(db, get_or_404(db, Payment, pid, "Zahlung")))
+    return _payment_out(db, get_or_404(db, Payment, pid, "Zahlung"))
 
 
 @router.post("/payments/{pid}/reverse", dependencies=[FW])
 def payments_reverse(pid: int, body: S.ReverseIn, db: Session = Depends(get_db), user: AppUser = Depends(current_user)):
     rev = P.reverse_payment(db, user.id, pid, reason=body.reason, booking_date=body.booking_date)
     db.commit()
-    return js(P.payment_view(db, rev))
+    return _payment_out(db, rev)
 
 
 # --- Rechnungen ----------------------------------------------------------------------------------------------------------------------
@@ -252,11 +268,14 @@ def notice_out(n: DunningNotice, full: bool = True) -> dict:
 
 
 @router.get("/dunning/overdue", dependencies=[FR])
-def dunning_overdue(as_of: date | None = None, grace_days: int = Query(0, ge=0, le=60), db: Session = Depends(get_db)):
-    items = DN.candidates(db, as_of, grace_days)
+def dunning_overdue(as_of: str | None = Query(default=None, description="Stichtag (JJJJ-MM-TT, nicht in der Zukunft); ohne Angabe heute"),
+                    grace_days: int = Query(0, ge=0, le=60), db: Session = Depends(get_db)):
+    st = ST.resolve(as_of)
+    items = DN.candidates(db, st.as_of, grace_days)
     labels = {i["lease_id"]: M.lease_title(db, db.get(Lease, i["lease_id"])) for i in items}
     return {"items": js([{**i, "lease_label": labels[i["lease_id"]]} for i in items]), "summary": js(DN.summarize(items)), "min_days_between_levels": DN.MIN_DAYS_BETWEEN_LEVELS,
-            "note": "Gebühren und Verzugszinsen werden nicht berechnet. Es erfolgt kein automatischer Versand."}
+            "note": "Gebühren und Verzugszinsen werden nicht berechnet. Es erfolgt kein automatischer Versand.",
+            "stichtag": ST.meta("dunning", st, historical_supported=True, limitations=ST_LIMITS + ["Mahnstufen/Entwürfe zeigen den heutigen Stand (Versand und Entwürfe haben kein Stichtagsarchiv)."])}
 
 
 @router.post("/dunning/prepare", dependencies=[FW])
@@ -424,7 +443,14 @@ def bank_reopen(tid: int, body: S.ReasonIn, db: Session = Depends(get_db), user:
 # --- Auswertungen ---------------------------------------------------------------------------------------------------------------------
 @router.get("/economics", dependencies=[FR])
 def economics(start: date, end: date, scope: str = "portfolio", id: int | None = None, db: Session = Depends(get_db)):
-    return js(E.Engine(db, start, end).report(scope, id))
+    body = js(E.Engine(db, start, end).report(scope, id))
+    today = date.today()
+    as_of = min(end, today)  # Datenstand (Invariante 8): Ist/Offen höchstens bis heute; Prognose bleibt im eigenen Feld
+    body["stichtag"] = ST.meta("economics", ST.Stichtag(as_of, today), mode="datenstand", historical_supported=True, limitations=[
+        "Ist und offene Posten gelten bis zum Datenstand (Buchungen bis zum Datenstand); das Soll ist vertraglicher Planwert für den gesamten Zeitraum.",
+        "Ein Periodenende in der Zukunft ist kein Ist-Stichtag: Prognosewerte stehen getrennt in prognose_periodenende.",
+        "Später zurückgenommene Zuordnungen und heute stornierte Sollstellungen wirken auch auf zurückliegende Zeiträume (ADR 0002, A6)."])
+    return body
 
 
 @router.get("/vacancy", dependencies=[FR])

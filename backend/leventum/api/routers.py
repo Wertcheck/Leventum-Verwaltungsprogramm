@@ -90,13 +90,7 @@ def dashboard(as_of: str | None = Query(default=None, description="Stichtag (YYY
     can_fin = can_read_finance(user)
     if as_of is not None and not can_fin:
         require_finance_read(user)  # Rechteprüfung VOR jeder Stichtagsvalidierung (auch bei ungültigem/zukünftigem Wert -> 403)
-    day = None
-    if as_of is not None:
-        try:
-            day = date.fromisoformat(as_of)
-        except ValueError:
-            raise ServiceError("invalid_as_of", "Der Stichtag muss als Datum im Format JJJJ-MM-TT angegeben werden.", 422)
-    return build_dashboard(db, day, settings.contract_end_preview_days, include_finance=can_fin)
+    return build_dashboard(db, as_of, settings.contract_end_preview_days, include_finance=can_fin)  # Auflösung/Validierung zentral in services/stichtag.resolve
 
 
 # --- Backup (nur Administrator) -------------------------------------------------------------

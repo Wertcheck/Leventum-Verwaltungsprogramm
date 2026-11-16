@@ -15,6 +15,7 @@ KPI_DEFINITIONS = [
     ("main_rent_obligations", "Monatliche Hauptmietverpflichtungen", "D"),
     ("sublease_receivables", "Monatliche Untermietforderungen", "D"),
     ("open_receivables", "Offene Mietforderungen", "D"),
+    ("overdue_receivables", "Überfällige Mietforderungen", "D"),
     ("overdue_payments", "Überfällige Zahlungen", "D"),
     ("monthly_utility_costs", "Monatliche Betriebskosten", "D"),
     ("open_tasks", "Offene Aufgaben", "E"),
@@ -23,6 +24,8 @@ KPI_DEFINITIONS = [
     ("physical_vacancy", "Physischer Leerstand", "D"),
     ("economic_vacancy_cost", "Wirtschaftlicher Leerstand (Monat)", "D"),
     ("upcoming_contract_ends", "Anstehende Vertragsenden", "C"),
+    ("upcoming_main_lease_ends", "Anstehende Hauptmietvertragsenden", "C"),
+    ("upcoming_sublease_ends", "Anstehende Untermietvertragsenden", "C"),
 ]
 
 from datetime import date
@@ -31,8 +34,8 @@ from sqlalchemy import func, select
 
 from leventum import domain
 from leventum.models import Lease, Property, Unit
+from leventum.services import stichtag as ST
 from leventum.services.charges import receivable_position
-from leventum.services.errors import ServiceError
 from leventum.services.leases import is_running, upcoming_ends
 
 
@@ -46,8 +49,8 @@ def _active_tenants(db, as_of=None):
     return len(ids)
 
 
-def _upcoming_ends(db, as_of, days):
-    return len(upcoming_ends(db, as_of, days))  # zentrale Definition in services/leases.py (gleiche Quelle wie /reminders)
+def _upcoming_ends(db, as_of, days, kind=None):
+    return len(upcoming_ends(db, as_of, days, kind))  # zentrale Definition in services/leases.py (gleiche Quelle wie /reminders)
 
 
 def _units(db):
@@ -84,6 +87,7 @@ DEFINITIONS = {
     "main_rent_obligations": "Soll der Hauptmieten (Kalt + Nebenkosten) für den laufenden Monat, tagesanteilig laut Vertragskonditionen (aus der zentralen Soll-Berechnung).",
     "sublease_receivables": "Soll der Untermieten (Kalt + Nebenkosten) für den laufenden Monat, tagesanteilig laut Vertragskonditionen.",
     "open_receivables": "Summe aller offenen Forderungen gegen Untermieter zum Stichtag (Sollstellungen abzüglich der Zahlungen mit Buchungsdatum bis zum Stichtag), unabhängig von der Fälligkeit; später gebuchte Zahlungen mindern den Stand zum Stichtag nicht. Einschränkung: später zurückgenommene Zuordnungen und heute stornierte Sollstellungen wirken auch auf historische Stichtage (ADR 0002, A6).",
+    "overdue_receivables": "EUR-Summe der offenen Beträge (nach Teilzahlungen mit Buchungsdatum bis zum Stichtag) aller Forderungen gegen Untermieter, deren Fälligkeit vor dem Stichtag liegt. Teilmenge der offenen Mietforderungen (diese enthalten auch noch nicht fällige Forderungen). Gleiche Einschränkungen für historische Stichtage wie dort (ADR 0002, A6).",
     "overdue_payments": "Anzahl offener Forderungspositionen (Sollstellungen) zum Stichtag, deren Fälligkeit vor dem Stichtag liegt – nach Teilzahlungen mit Buchungsdatum bis zum Stichtag.",
     "monthly_utility_costs": "Nebenkosten-Soll der Hauptmieten (Vorauszahlung + Pauschale) für den laufenden Monat.",
     "open_tasks": "Aufgaben mit Status offen, in Bearbeitung oder wartet.",
@@ -91,7 +95,9 @@ DEFINITIONS = {
     "open_repairs": "Reparaturen mit Status gemeldet, terminiert, in Arbeit oder wartet.",
     "physical_vacancy": "Anzahl heute unbelegter kleinster Einheiten (Bett, Zimmer ohne Betten, Wohneinheit ohne Zimmer) ohne laufenden Untermietvertrag.",
     "economic_vacancy_cost": "Hauptmiete-Soll (Kalt+NK) des laufenden Monats an Tagen mit Mietverpflichtung, aber ohne laufenden Untermietvertrag (Teil der Hauptmietkosten).",
-    "upcoming_contract_ends": "Zum Stichtag laufende Haupt- und Untermietverträge (Mietbeginn erreicht), deren wirksames Ende zwischen Stichtag und Stichtag + Vorschauzeitraum liegt (beide Grenzen inklusiv). Der Vorschauzeitraum ist konfigurierbar (Einstellung contract_end_preview_days, Standard 90 Tage). Verträge mit offenem Ende und nicht begonnene Verträge zählen nicht.",
+    "upcoming_contract_ends": "Zum Stichtag laufende Haupt- und Untermietverträge (Mietbeginn erreicht), deren wirksames Ende zwischen Stichtag und Stichtag + Vorschauzeitraum liegt (beide Grenzen inklusiv). Der Vorschauzeitraum ist konfigurierbar (Einstellung contract_end_preview_days, Standard 90 Tage). Verträge mit offenem Ende und nicht begonnene Verträge zählen nicht. Summe aus Hauptmiet- und Untermietvertragsenden.",
+    "upcoming_main_lease_ends": "Zum Stichtag laufende Hauptmietverträge (Mietbeginn erreicht), deren wirksames Ende zwischen Stichtag und Stichtag + Vorschauzeitraum liegt (beide Grenzen inklusiv; Einstellung contract_end_preview_days, Standard 90 Tage). Offenes Ende und nicht begonnene Verträge zählen nicht.",
+    "upcoming_sublease_ends": "Zum Stichtag laufende Untermietverträge (Mietbeginn erreicht, auch gekündigte mit wirksamem Ende), deren wirksames Ende zwischen Stichtag und Stichtag + Vorschauzeitraum liegt (beide Grenzen inklusiv; Einstellung contract_end_preview_days, Standard 90 Tage). Offenes Ende und nicht begonnene Verträge zählen nicht.",
 }
 
 
@@ -116,6 +122,7 @@ IMPLEMENTED_MONEY: dict = {
     "main_rent_obligations": lambda db, a, n: _fig(db)["main_total"],
     "sublease_receivables": lambda db, a, n: _fig(db)["sub_total"],
     "open_receivables": lambda db, a, n: _pos(db, a)["open_total"],
+    "overdue_receivables": lambda db, a, n: _pos(db, a)["overdue_total"],
     "monthly_utility_costs": lambda db, a, n: _fig(db)["main_utility"],
     "economic_vacancy_cost": lambda db, a, n: _fig(db)["economic_vacancy_cost"],
 }
@@ -149,21 +156,29 @@ IMPLEMENTED: dict = {
     "active_subleases": lambda db, a, n: len(_running(db, "sub", a)),
     "active_tenants": lambda db, a, n: _active_tenants(db, a),
     "upcoming_contract_ends": _upcoming_ends,
+    "upcoming_main_lease_ends": lambda db, a, n: _upcoming_ends(db, a, n, "main"),
+    "upcoming_sublease_ends": lambda db, a, n: _upcoming_ends(db, a, n, "sub"),
 }
 
 # Stichtagsfähig (as_of wirkt echt): Verträge (Status/Stammdaten zeigen den heutigen Stand, ADR 0002 A6c), Forderungen, Überfällige, Vertragsenden.
 # Alle übrigen Kennzahlen zeigen immer den heutigen Stand bzw. den heutigen Monat (keine erfundene Historie).
-HISTORICAL_SUPPORTED = {"active_main_leases", "active_subleases", "active_tenants", "open_receivables", "overdue_payments", "upcoming_contract_ends"}
+HISTORICAL_SUPPORTED = {"active_main_leases", "active_subleases", "active_tenants", "open_receivables", "overdue_receivables", "overdue_payments",
+                        "upcoming_contract_ends", "upcoming_main_lease_ends", "upcoming_sublease_ends"}
+
+DASHBOARD_LIMITATIONS = [
+    "Historisch (Stichtag in der Vergangenheit) berechnet: Vertragsstatus, Forderungen, Überfällige und Vertragsenden.",
+    "Immobilien, Wohneinheiten, Monatswerte (Soll, Betriebskosten, Leerstand), Aufgaben und Reparaturen zeigen immer den heutigen Stand.",
+    "Später zurückgenommene Zuordnungen, heute stornierte Sollstellungen und vorzeitig beendete Verträge wirken auch auf historische Stichtage (ADR 0002, A6).",
+]
 
 
-def build_dashboard(db: Session, as_of: date | None = None, preview_days: int | None = None, include_finance: bool = True) -> dict:
-    """as_of=None -> heute. Zukunft -> 422. preview_days: Vorschauzeitraum Vertragsenden (None -> Standard aus Settings).
-    include_finance=False (Recht finance:read fehlt): Finanz-KPIs (FINANCE_KPI_KEYS) und Finanz-Hinweise werden weder berechnet noch ausgeliefert."""
+def build_dashboard(db: Session, as_of: date | str | None = None, preview_days: int | None = None, include_finance: bool = True) -> dict:
+    """as_of=None -> heute (Datum oder ISO-Text; Auflösung über services/stichtag.resolve). Zukunft -> 422. preview_days: Vorschauzeitraum Vertragsenden
+    (None -> Standard aus Settings). include_finance=False (Recht finance:read fehlt): Finanz-KPIs (FINANCE_KPI_KEYS) und Finanz-Hinweise werden weder
+    berechnet noch ausgeliefert; `stichtag.historical_available` = include_finance."""
     from leventum.security.finance_access import FINANCE_KPI_KEYS
-    today = date.today()
-    if as_of is not None and as_of > today:
-        raise ServiceError("as_of_in_future", "Der Stichtag darf nicht in der Zukunft liegen (keine Prognose im Dashboard).", 422)
-    as_of = as_of or today
+    st = ST.resolve(as_of)
+    as_of = st.as_of
     if preview_days is None:
         from leventum.config import Settings
         preview_days = Settings().contract_end_preview_days
@@ -186,5 +201,6 @@ def build_dashboard(db: Session, as_of: date | None = None, preview_days: int | 
     from leventum.api.master import js
     from leventum.services import reminders as rem, tasks as tk
     from leventum.api.master import ser
-    return {"as_of": as_of.isoformat(), "kpis": kpis, "warnings": js(rem.compute(db, preview_days=preview_days, include_finance=include_finance)[:8]),
+    return {"as_of": as_of.isoformat(), "stichtag": ST.meta("dashboard", st, historical_supported=True, limitations=DASHBOARD_LIMITATIONS, historical_available=include_finance),
+            "kpis": kpis, "warnings": js(rem.compute(db, preview_days=preview_days, include_finance=include_finance)[:8]),
             "tasks": [{**ser(t), "overdue": tk.is_overdue(t)} for t in tk.query(db, open_only=True)[:5]]}

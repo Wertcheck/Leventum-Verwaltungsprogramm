@@ -151,9 +151,10 @@ def approve(db: Session, actor_id: int | None, notice_id: int) -> DunningNotice:
     if PLACEHOLDER in n.body:
         raise ServiceError("placeholder_unresolved", "Im Text ist noch ein Platzhalter (z. B. die Zahlungsfrist) einzutragen.", 422)
     stale = []
+    today = date.today()  # gleicher Stichtagsbegriff wie prepare/candidates: Zahlungen wirken ab Buchungsdatum (booking_date <= heute)
     for ln in n.lines:
         c = db.get(Charge, ln.charge_id)
-        cur = open_amount(db, c)
+        cur = open_amount(db, c, today)
         if c.voided_at or cur != ln.open_amount:
             stale.append({"charge_id": c.id, "draft_amount": ln.open_amount, "current_open": cur if not c.voided_at else Decimal("0.00")})
     if stale:
