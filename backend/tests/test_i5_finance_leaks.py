@@ -265,7 +265,7 @@ def test_b2_repair_events_and_history_carry_no_invoice_amount_without_finance_re
     assert leaks(hist.text) == []
     for path in (f"/history?entity_type=party&entity_id={scene['tenant']}", f"/tenants/{scene['tenant']}/overview"):
         r = c.get(V + path)
-        assert r.status_code == 200 and leaks(r.text) == [] and "476" not in r.text, path
+        assert r.status_code == 200 and leaks(r.text) == [] and not re.search(r"(?<![\d.,])476(?:[.,]\d{1,2})?(?![\d])", r.text), path  # als eigenständiger Betrag, nicht als Teil von IDs/Zeitstempeln (Review M3)
 
 
 @pytest.mark.parametrize("role", NO_FIN_ROLES)

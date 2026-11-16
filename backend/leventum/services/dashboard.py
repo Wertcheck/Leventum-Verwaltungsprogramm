@@ -169,6 +169,7 @@ DASHBOARD_LIMITATIONS = [
     "Historisch (Stichtag in der Vergangenheit) berechnet: Vertragsstatus, Forderungen, Überfällige und Vertragsenden.",
     "Immobilien, Wohneinheiten, Monatswerte (Soll, Betriebskosten, Leerstand), Aufgaben und Reparaturen zeigen immer den heutigen Stand.",
     "Später zurückgenommene Zuordnungen, heute stornierte Sollstellungen und vorzeitig beendete Verträge wirken auch auf historische Stichtage (ADR 0002, A6).",
+    "Verträge mit gespeichertem Status „beendet“ fehlen in historischen Ständen vor ihrem Ende (A6c; Review M5); Verträge mit Enddatum in der Vergangenheit und Status „aktiv“ werden dagegen korrekt gezählt.",
 ]
 
 

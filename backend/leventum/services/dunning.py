@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from leventum import domain
 from leventum.models import Charge, DunningLine, DunningNotice, Lease
-from leventum.services import audit
+from leventum.services import audit, stichtag
 from leventum.services.charges import open_amount
 from leventum.services.errors import ServiceError
 from leventum.services.master import get_or_404
@@ -104,7 +104,7 @@ CHARGE_LABEL = {"base_rent": "Kaltmiete", "other_charges": "Zuschlag", "utility_
 
 def prepare_notices(db: Session, actor_id: int | None, *, as_of: date | None = None, lease_id: int | None = None, grace_days: int = 0) -> list[DunningNotice]:
     """Legt Entwürfe an (ein Entwurf je Vertrag und Stufe). Idempotent: Sollstellungen mit bestehendem Entwurf werden nicht erneut aufgenommen."""
-    as_of = as_of or date.today()
+    as_of = stichtag.resolve(as_of).as_of  # Zukunft -> 422 as_of_in_future (Review M2); None -> heute
     groups: dict[tuple[int, int], list[dict]] = {}
     for c in candidates(db, as_of, grace_days, lease_id):
         if c["state"] == "due":

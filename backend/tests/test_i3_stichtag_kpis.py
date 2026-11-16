@@ -1010,3 +1010,18 @@ def test_all_views_agree_historical(fin, auth_client):
     assert k["open_receivables"]["value"] == "700.00" and k["overdue_receivables"]["value"] == "700.00" and k["overdue_payments"]["value"] == 2
     dun = get_ok(auth_client, "/dunning/overdue", as_of=as_of)
     assert {i["charge_id"]: i["open_amount"] for i in dun["items"]} == {a.id: "400.00", b.id: "300.00"}
+
+
+# ---------------------------------------------------------------------------------------------------------------------------------
+# Review M2: POST /dunning/prepare lehnt Zukunfts-Stichtage ab (Ist-Auswertung, keine Prognose) und schreibt dabei nichts
+# ---------------------------------------------------------------------------------------------------------------------------------
+def test_dunning_prepare_future_as_of_is_422_and_writes_nothing(world, auth_client):
+    r = auth_client.post(V + "/dunning/prepare", json={"as_of": iso(1)})
+    assert r.status_code == 422, r.text
+    assert r.json()["detail"]["code"] == "as_of_in_future"
+    assert auth_client.get(V + "/dunning/notices").json()["items"] == []
+
+
+def test_dunning_prepare_today_and_past_still_allowed(world, auth_client):
+    assert auth_client.post(V + "/dunning/prepare", json={"as_of": iso(0)}).status_code == 200
+    assert auth_client.post(V + "/dunning/prepare", json={"as_of": iso(-30)}).status_code == 200

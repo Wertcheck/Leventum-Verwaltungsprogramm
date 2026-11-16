@@ -145,7 +145,7 @@ def test_regression_approved_but_unsent_notice_never_escalates(w):
     """Befund aus der Master-Review: Eine nur freigegebene Stufe-1-Erinnerung führte nach 7 Tagen zu einem Stufe-2-Entwurf."""
     n = fix(DN.prepare_notices(w.db, None, as_of=date(2026, 2, 10))[0])
     DN.approve(w.db, None, n.id)
-    for later in (date(2026, 2, 20), date(2026, 3, 30), date(2027, 6, 1)):
+    for later in (date(2026, 2, 20), date(2026, 3, 30), date.today()):
         assert {(c["state"], c["proposed_level"]) for c in DN.candidates(w.db, later)} == {("approved_not_sent", 1)}
         assert DN.prepare_notices(w.db, None, as_of=later) == []
     DN.mark_sent(w.db, None, n.id, sent_on=date(2026, 2, 11), via="Brief")

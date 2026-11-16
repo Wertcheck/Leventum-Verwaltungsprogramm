@@ -15,7 +15,12 @@ exec unshare --mount --net --propagation private -- bash -c '
   set -e
   # Alle echten Dateisysteme read-only (Root-Dateisystem und separate rw-Mounts wie /dev/shm); danach privates tmpfs für /tmp.
   mount -o remount,ro,bind /
-  for m in /dev/shm /run; do mountpoint -q "$m" 2>/dev/null && mount -o remount,ro,bind "$m" 2>/dev/null || true; done
+  # Review M4: ALLE als rw eingehängten Mounts (aus /proc/self/mounts) read-only, nicht nur eine feste Liste; /proc, /sys und /dev/pts bleiben unberührt (Prozess-/Terminalbetrieb).
+  while read -r _ mp _ opts _; do
+    case ",$opts," in *,rw,*) ;; *) continue ;; esac
+    case "$mp" in /|/proc|/proc/*|/sys|/sys/*|/dev/pts|/dev/mqueue) continue ;; esac
+    mp=$(printf "%b" "$mp"); mount -o remount,ro,bind "$mp" 2>/dev/null || true
+  done < /proc/self/mounts
   mount -t tmpfs -o mode=1777,size=1g tmpfs /tmp
   cd "$RO_CWD"
   export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0="*" GIT_OPTIONAL_LOCKS=0
