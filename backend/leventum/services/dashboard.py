@@ -174,9 +174,9 @@ DASHBOARD_LIMITATIONS = [
 
 def build_dashboard(db: Session, as_of: date | str | None = None, preview_days: int | None = None, include_finance: bool = True) -> dict:
     """as_of=None -> heute (Datum oder ISO-Text; Auflösung über services/stichtag.resolve). Zukunft -> 422. preview_days: Vorschauzeitraum Vertragsenden
-    (None -> Standard aus Settings). include_finance=False (Recht finance:read fehlt): Finanz-KPIs (FINANCE_KPI_KEYS) und Finanz-Hinweise werden weder
+    (None -> Standard aus Settings). include_finance=False (Recht finance:read fehlt): nur KPIs aus NON_FINANCE_KPI_KEYS (Allow-Liste) und nur nicht-finanzielle Hinweise; Rest wird weder
     berechnet noch ausgeliefert; `stichtag.historical_available` = include_finance."""
-    from leventum.security.finance_access import FINANCE_KPI_KEYS
+    from leventum.security.finance_access import NON_FINANCE_KPI_KEYS
     st = ST.resolve(as_of)
     as_of = st.as_of
     if preview_days is None:
@@ -185,7 +185,7 @@ def build_dashboard(db: Session, as_of: date | str | None = None, preview_days: 
     db.info["_as_of"] = as_of
     kpis = []
     for key, label, phase in KPI_DEFINITIONS:
-        if not include_finance and key in FINANCE_KPI_KEYS:
+        if not include_finance and key not in NON_FINANCE_KPI_KEYS:  # Allow-Liste: unklassifizierte KPIs bleiben ohne finance:read verborgen
             continue
         fn = IMPLEMENTED.get(key)
         if key in IMPLEMENTED_MONEY:

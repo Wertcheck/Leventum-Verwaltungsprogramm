@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from leventum import domain
 from leventum.models import Invoice, Lease, Party, Property, Repair, RepairEvent, Task, Unit
+from leventum.security.finance_access import FINANCE_REPAIR_EVENT_KINDS
 from leventum.services import audit, payments as pay
 from leventum.services.errors import ServiceError
 from leventum.services.master import get_or_404
@@ -118,9 +119,12 @@ def costs(db: Session, r: Repair) -> dict:
             "deviation_from_estimate": q(actual - r.cost_estimate) if r.cost_estimate is not None else None}
 
 
-def view(db: Session, r: Repair) -> dict:
+def view(db: Session, r: Repair, include_finance: bool = True) -> dict:
+    """include_finance=False (finance:read fehlt): keine Kosten, Ereignisse der Art FINANCE_REPAIR_EVENT_KINDS (Rechnung mit Betrag) entfallen (Filter nach Ereignisart)."""
     ev = db.scalars(select(RepairEvent).where(RepairEvent.repair_id == r.id).order_by(RepairEvent.id)).all()
     tasks = db.scalars(select(Task).where(Task.repair_id == r.id).order_by(Task.id)).all()
+    if not include_finance:
+        return {"costs": None, "events": [e for e in ev if e.kind not in FINANCE_REPAIR_EVENT_KINDS], "tasks": tasks}
     return {"costs": costs(db, r), "events": ev, "tasks": tasks}
 
 

@@ -14,7 +14,7 @@ from leventum.api.finance import _store, doc_out
 from leventum.api.master import js, ser
 from leventum.config import Settings
 from leventum.models import AppUser, Communication, Document, HandoverProtocol, Lease, Repair, Task
-from leventum.security.finance_access import can_read_finance, is_finance_reminder_key, require_finance_read
+from leventum.security.finance_access import (FINANCE_DOC_TYPES, can_read_finance, is_finance_reminder_key, require_finance_doc_access, require_finance_read)
 from leventum.services import communications as COM, documents as DOC, history as H, reminders as REM, repairs as R, tasks as T
 from leventum.services.errors import ServiceError
 from leventum.services.master import get_or_404
@@ -108,7 +108,8 @@ def reminder_to_task(body: S.ReminderTaskIn, db: Session = Depends(get_db), user
     elif rem["entity_type"] == "deposit":
         from leventum.models import Deposit
         links["lease_id"] = get_or_404(db, Deposit, rem["entity_id"], "Kaution").lease_id
-    t = T.create_task(db, user.id, title=rem["title"][:200], description=rem["detail"], due_date=body.due_date or rem["due_date"],
+    # Titel/Beschreibung betragsfrei (task_title): Aufgaben sind mit task:read lesbar, auch ohne finance:read. Altdaten mit Betrag im Titel: siehe docs/03-api-module.md.
+    t = T.create_task(db, user.id, title=rem["task_title"][:200], description=rem["detail"], due_date=body.due_date or rem["due_date"],
                       priority="high" if rem["severity"] == "critical" else "normal", **links)
     t.source, t.dedupe_key = "reminder", rem["key"]
     db.commit()
@@ -116,20 +117,22 @@ def reminder_to_task(body: S.ReminderTaskIn, db: Session = Depends(get_db), user
 
 
 # --- Reparaturen -----------------------------------------------------------------------------------------------------------------------
-def repair_out(db: Session, r: Repair, full: bool = False) -> dict:
-    c = R.costs(db, r)
-    o = {**ser(r), "costs": js(c), "is_open": R.is_open(r)}
+def repair_out(db: Session, r: Repair, full: bool = False, can_fin: bool = True) -> dict:
+    """can_fin=False (finance:read fehlt): kein Block 'costs', keine Rechnungsereignisse, keine Finanzdokumente. cost_estimate (Schätzung) bleibt sichtbar."""
+    o = {**ser(r), "is_open": R.is_open(r)}
+    if can_fin:
+        o["costs"] = js(R.costs(db, r))
     if full:
-        v = R.view(db, r)
+        v = R.view(db, r, include_finance=can_fin)
         o["events"] = [ser(e) for e in v["events"]]
         o["tasks"] = [task_out(t, db) for t in v["tasks"]]
-        o["documents"] = [doc_out(d) for d in DOC.for_entity(db, "repair", r.id)]
+        o["documents"] = [doc_out(d) for d in DOC.for_entity(db, "repair", r.id, exclude_types=None if can_fin else FINANCE_DOC_TYPES)]
     return o
 
 
 @router.get("/repairs", dependencies=[RR])
 def repairs_list(status: str | None = None, open_only: bool = False, property_id: int | None = None, unit_id: int | None = None, priority: str | None = None,
-                 db: Session = Depends(get_db)):
+                 db: Session = Depends(get_db), user: AppUser = Depends(current_user)):
     stmt = select(Repair).order_by(Repair.reported_on.desc(), Repair.id.desc())
     if status:
         stmt = stmt.where(Repair.status == status)
@@ -142,47 +145,48 @@ def repairs_list(status: str | None = None, open_only: bool = False, property_id
         stmt = stmt.where(Repair.unit_id == unit_id)
     if priority:
         stmt = stmt.where(Repair.priority == priority)
-    return {"items": [repair_out(db, r) for r in db.scalars(stmt.limit(500))]}
+    can_fin = can_read_finance(user)
+    return {"items": [repair_out(db, r, can_fin=can_fin) for r in db.scalars(stmt.limit(500))]}
 
 
 @router.post("/repairs", dependencies=[RW], status_code=201)
 def repairs_create(body: S.RepairIn, db: Session = Depends(get_db), user: AppUser = Depends(current_user)):
     r = R.create_repair(db, user.id, **_dump(body))
     db.commit()
-    return repair_out(db, r, True)
+    return repair_out(db, r, True, can_read_finance(user))
 
 
 @router.get("/repairs/{rid}", dependencies=[RR])
-def repairs_get(rid: int, db: Session = Depends(get_db)):
-    return repair_out(db, get_or_404(db, Repair, rid, "Reparatur"), True)
+def repairs_get(rid: int, db: Session = Depends(get_db), user: AppUser = Depends(current_user)):
+    return repair_out(db, get_or_404(db, Repair, rid, "Reparatur"), True, can_read_finance(user))
 
 
 @router.patch("/repairs/{rid}", dependencies=[RW])
 def repairs_patch(rid: int, body: S.RepairPatch, db: Session = Depends(get_db), user: AppUser = Depends(current_user)):
     r = R.update_repair(db, user.id, rid, _dump(body, exclude_unset=True))
     db.commit()
-    return repair_out(db, r, True)
+    return repair_out(db, r, True, can_read_finance(user))
 
 
 @router.post("/repairs/{rid}/status", dependencies=[RW])
 def repairs_status(rid: int, body: S.RepairStatusIn, db: Session = Depends(get_db), user: AppUser = Depends(current_user)):
     r = R.set_status(db, user.id, rid, body.status, body.note, body.on)
     db.commit()
-    return repair_out(db, r, True)
+    return repair_out(db, r, True, can_read_finance(user))
 
 
 @router.post("/repairs/{rid}/notes", dependencies=[RW], status_code=201)
 def repairs_note(rid: int, body: S.NoteTextIn, db: Session = Depends(get_db), user: AppUser = Depends(current_user)):
     R.add_note(db, user.id, rid, body.text)
     db.commit()
-    return repair_out(db, get_or_404(db, Repair, rid, "Reparatur"), True)
+    return repair_out(db, get_or_404(db, Repair, rid, "Reparatur"), True, can_read_finance(user))
 
 
 @router.post("/repairs/{rid}/invoices", dependencies=[RW])
 def repairs_link_invoice(rid: int, body: S.InvoiceLinkIn, db: Session = Depends(get_db), user: AppUser = Depends(current_user)):
     R.link_invoice(db, user.id, rid, body.invoice_id)
     db.commit()
-    return repair_out(db, get_or_404(db, Repair, rid, "Reparatur"), True)
+    return repair_out(db, get_or_404(db, Repair, rid, "Reparatur"), True, can_read_finance(user))
 
 
 # --- Kommunikation / Übergabeprotokolle -------------------------------------------------------------------------------------------------------
@@ -215,22 +219,33 @@ def handover_create(body: S.HandoverIn, db: Session = Depends(get_db), user: App
 
 # --- Historie ---------------------------------------------------------------------------------------------------------------------------------
 @router.get("/history", dependencies=[MR])
-def history(entity_type: str, entity_id: int, limit: int = Query(200, le=500), db: Session = Depends(get_db)):
-    if entity_type not in ("party", "lease", "property", "unit", "repair", "task", "deposit", "invoice"):
+def history(entity_type: str, entity_id: int, limit: int = Query(200, le=500), db: Session = Depends(get_db), user: AppUser = Depends(current_user)):
+    if entity_type not in ("party", "lease", "property", "unit", "repair", "task", "deposit", "invoice", "dunning_notice"):
         raise ServiceError("invalid", "Ungültiger Typ.")
-    return {"items": js(H.entity_timeline(db, entity_type, entity_id, limit))}
+    if entity_type in ("deposit", "invoice", "dunning_notice"):
+        require_finance_read(user)  # Finanzobjekte: Historie nur mit finance:read (403 vor jeder Abfrage)
+    return {"items": js(H.entity_timeline(db, entity_type, entity_id, limit, include_finance=can_read_finance(user)))}
 
 
 # --- Dokumente (vollständige Verwaltung) -------------------------------------------------------------------------------------------------------
 @router.get("/documents/search", dependencies=[DR])
 def documents_search(q: str | None = None, doc_type: str | None = None, entity_type: str | None = None, entity_id: int | None = None, include_deleted: bool = False,
-                     db: Session = Depends(get_db)):
+                     db: Session = Depends(get_db), user: AppUser = Depends(current_user)):
+    hide = None if can_read_finance(user) else FINANCE_DOC_TYPES  # Finanzdokumente (Rechnung, BK-Abrechnung, Kaution) ohne finance:read unsichtbar
     return {"items": [{**doc_out(d), "deleted_at": js(d.deleted_at), "delete_reason": d.delete_reason} for d in
-                      DOC.query(db, q=q, doc_type=doc_type, entity_type=entity_type, entity_id=entity_id, include_deleted=include_deleted)]}
+                      DOC.query(db, q=q, doc_type=doc_type, entity_type=entity_type, entity_id=entity_id, include_deleted=include_deleted, exclude_types=hide)]}
+
+
+def _finance_doc_gate(db: Session, user: AppUser, did: int) -> None:
+    """403 für Dokumente mit Finanztyp ohne finance:read (vor jeder weiteren Aktion; unbekannte Id bleibt 404 durch den Aufrufer)."""
+    doc = db.get(Document, did)
+    if doc is not None:
+        require_finance_doc_access(user, doc.doc_type)
 
 
 @router.post("/documents/{did}/links", dependencies=[DW])
 def documents_link(did: int, body: S.DocLinkIn, db: Session = Depends(get_db), user: AppUser = Depends(current_user)):
+    _finance_doc_gate(db, user, did)
     d = DOC.add_link(db, user.id, did, body.entity_type, body.entity_id)
     db.commit()
     return doc_out(d)
@@ -238,6 +253,7 @@ def documents_link(did: int, body: S.DocLinkIn, db: Session = Depends(get_db), u
 
 @router.post("/documents/{did}/delete", dependencies=[DW])
 def documents_delete(did: int, body: S.VoidIn, db: Session = Depends(get_db), user: AppUser = Depends(current_user)):
+    _finance_doc_gate(db, user, did)
     d = DOC.soft_delete(db, user.id, did, body.reason)
     db.commit()
     return {**doc_out(d), "deleted_at": js(d.deleted_at)}
@@ -256,8 +272,10 @@ def documents_verify_all(db: Session = Depends(get_db), settings: Settings = Dep
 
 
 @router.get("/documents/{did}/verify", dependencies=[DR])
-def documents_verify(did: int, db: Session = Depends(get_db), settings: Settings = Depends(get_settings)):
-    return DOC.verify(_store(settings), get_or_404(db, Document, did, "Dokument"))
+def documents_verify(did: int, db: Session = Depends(get_db), settings: Settings = Depends(get_settings), user: AppUser = Depends(current_user)):
+    doc = get_or_404(db, Document, did, "Dokument")
+    require_finance_doc_access(user, doc.doc_type)
+    return DOC.verify(_store(settings), doc)
 
 
 class PurgeIn(S.In):

@@ -15,6 +15,7 @@ from leventum.api.master import js, ser
 from leventum.config import Settings
 from leventum.models import (AppUser, BankAccount, BankImport, BankTransaction, Charge, Deposit, Document, DocumentLink, DunningNotice, Invoice, Lease,
                              LeaseAllocationWeight, Payment, Unit)
+from leventum.security.finance_access import FINANCE_DOC_TYPES, can_read_finance, require_finance_doc_access
 from leventum.services import bank as B, charges as C, deposits as D, documents as DOC, dunning as DN, economics as E, payments as P, stichtag as ST
 from leventum.services.errors import ServiceError
 from leventum.services import master as M
@@ -179,6 +180,7 @@ def doc_out(d: Document) -> dict:
 @router.post("/documents", dependencies=[Depends(require("document:write"))], status_code=201)
 async def documents_upload(file: UploadFile = File(...), entity_type: str = Form(...), entity_id: int = Form(...), doc_type: str = Form("sonstige"),
                            db: Session = Depends(get_db), user: AppUser = Depends(current_user), settings: Settings = Depends(get_settings)):
+    require_finance_doc_access(user, doc_type)  # Finanztypen (Rechnung, BK-Abrechnung, Kaution) nur mit finance:read; 403 vor dem Lesen der Datei
     data = await file.read(settings.max_upload_bytes + 1)
     import io
     doc = DOC.upload(db, _store(settings), user.id, stream=io.BytesIO(data), filename=file.filename or "datei", doc_type=doc_type, entity_type=entity_type, entity_id=entity_id)
@@ -187,8 +189,9 @@ async def documents_upload(file: UploadFile = File(...), entity_type: str = Form
 
 
 @router.get("/documents", dependencies=[Depends(require("document:read"))])
-def documents_list(entity_type: str, entity_id: int, db: Session = Depends(get_db)):
-    return {"items": [doc_out(d) for d in DOC.for_entity(db, entity_type, entity_id)]}
+def documents_list(entity_type: str, entity_id: int, db: Session = Depends(get_db), user: AppUser = Depends(current_user)):
+    hide = None if can_read_finance(user) else FINANCE_DOC_TYPES
+    return {"items": [doc_out(d) for d in DOC.for_entity(db, entity_type, entity_id, exclude_types=hide)]}
 
 
 def _content_disposition(name: str) -> str:
@@ -202,8 +205,9 @@ def _content_disposition(name: str) -> str:
 
 
 @router.get("/documents/{did}/download", dependencies=[Depends(require("document:read"))])
-def documents_download(did: int, db: Session = Depends(get_db), settings: Settings = Depends(get_settings)):
+def documents_download(did: int, db: Session = Depends(get_db), settings: Settings = Depends(get_settings), user: AppUser = Depends(current_user)):
     d = get_or_404(db, Document, did, "Dokument")
+    require_finance_doc_access(user, d.doc_type)
     if d.deleted_at:
         raise ServiceError("deleted", "Das Dokument wurde gelöscht.", 404)
     store = _store(settings)

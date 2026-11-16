@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from leventum import domain
 from leventum.models import Charge, Deposit, Lease, Repair, Task, UtilityStatement
+from leventum.security.finance_access import NON_FINANCE_REMINDER_TYPES
 from leventum.services import deposits as dep, documents as docs
 from leventum.services.charges import receivable_position
 from leventum.services.dunning import eur
@@ -62,13 +63,16 @@ def compute(db: Session, today: date | None = None, preview_days: int | None = N
     # überfällige Forderungen je Vertrag
     for lid, rows in (receivable_position(db, today)["overdue_by_lease"].items() if include_finance else ()):  # zentrale Stichtagslogik (ADR 0002)
         total, first = q(sum((o for _, o in rows), Decimal(0))), min(d for d, _ in rows)
-        out.append(_r(f"overdue:{lid}:{first}", "overdue_payment", "critical", f"Überfällige Zahlung – {lease_title(db, db.get(Lease, lid))}: {eur(total)} offen",
-                      f"{len(rows)} Sollstellung(en), älteste fällig am {first:%d.%m.%Y}. Mahnwesen prüfen.", first, "lease", lid, amount=total))
+        ltitle = lease_title(db, db.get(Lease, lid))
+        out.append(_r(f"overdue:{lid}:{first}", "overdue_payment", "critical", f"Überfällige Zahlung – {ltitle}: {eur(total)} offen",
+                      f"{len(rows)} Sollstellung(en), älteste fällig am {first:%d.%m.%Y}. Mahnwesen prüfen.", first, "lease", lid, amount=total,
+                      task_title=f"Überfällige Zahlung – {ltitle}"))  # betragsfrei: Aufgaben sind auch ohne finance:read lesbar
     for d in (db.scalars(select(Deposit)) if include_finance else ()):
         lease = db.get(Lease, d.lease_id)
         s = dep.summary(d, lease, today)
         if s["overdue"]:
-            out.append(_r(f"deposit:{d.id}", "deposit_overdue", "warning", f"Kaution überfällig – {lease_title(db, lease)}: {eur(s['open'])} offen", f"Fällig seit {d.due_date:%d.%m.%Y}.", d.due_date, "deposit", d.id))
+            out.append(_r(f"deposit:{d.id}", "deposit_overdue", "warning", f"Kaution überfällig – {lease_title(db, lease)}: {eur(s['open'])} offen", f"Fällig seit {d.due_date:%d.%m.%Y}.", d.due_date, "deposit", d.id,
+                          task_title=f"Kaution überfällig – {lease_title(db, lease)}"))
     for r in db.scalars(select(Repair).where(Repair.status.in_(domain.REPAIR_OPEN))):
         if r.scheduled_for and r.scheduled_for < today:
             out.append(_r(f"repair_late:{r.id}:{r.scheduled_for}", "repair_overdue", "critical", f"Reparatur #{r.id} „{r.title}“: Termin verstrichen ({r.scheduled_for:%d.%m.%Y})", "Status noch offen.", r.scheduled_for, "repair", r.id))
@@ -90,7 +94,10 @@ def compute(db: Session, today: date | None = None, preview_days: int | None = N
             out.append(_r(f"utility_statement:{l.id}:{y}", "utility_statement_due", "info", f"Hauptmietvertrag {lease_title(db, l)}: keine Nebenkostenabrechnung für {y} erfasst",
                           "Eingehende Abrechnung des Vermieters erfassen oder anfordern. Fristen sind rechtlich zu prüfen.", None, "lease", l.id))
     existing = {t.dedupe_key: t for t in db.scalars(select(Task).where(Task.dedupe_key.is_not(None)))}
+    if not include_finance:  # Allow-Liste: nur ausdrücklich als nicht finanziell klassifizierte Typen (unbekannte Typen bleiben verborgen)
+        out = [r for r in out if r["type"] in NON_FINANCE_REMINDER_TYPES]
     for r in out:
+        r.setdefault("task_title", r["title"])  # Titel einer daraus erzeugten Aufgabe (Finanztypen: ohne Betrag)
         t = existing.get(r["key"])
         r["task_id"], r["task_status"] = (t.id, t.status) if t else (None, None)
     out.sort(key=lambda r: (SEV_ORDER[r["severity"]], r["due_date"] or date.max, r["key"]))

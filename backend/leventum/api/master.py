@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, or_, select
 from sqlalchemy.inspection import inspect
 from sqlalchemy.orm import Session
@@ -14,8 +14,8 @@ from leventum.api.deps import current_user, get_db, require
 from leventum.models import (AuditEvent, Bed, CostType, Lease, LeaseNote, LeaseType, Party, PartyRole, Property, RentableUnit,
                              Room, Unit, UtilityStatement, UtilityStatementUnit)
 from leventum.models import AppUser
-from leventum.security.finance_access import can_read_finance, require_finance_read
-from leventum.services import charges as C, leases as L, master as M, utility as U
+from leventum.security.finance_access import can_read_finance, is_masked_value, mask_iban, require_finance_read
+from leventum.services import charges as C, history as H, leases as L, master as M, utility as U
 from leventum.services.errors import NotFound
 
 
@@ -50,13 +50,29 @@ def _dump(m, **kw):
 
 
 # --- Parteien --------------------------------------------------------------------------------------------
-def party_out(p: Party) -> dict:
-    return {**ser(p), "roles": sorted(r.role for r in p.roles)}
+def party_out(p: Party, can_fin: bool = True) -> dict:
+    """can_fin=False (finance:read fehlt): IBAN maskiert (nur die letzten 4 Zeichen). birth_date bleibt sichtbar (Entscheidung, Eigentümerbestätigung offen)."""
+    o = {**ser(p), "roles": sorted(r.role for r in p.roles)}
+    if not can_fin:
+        o["iban"] = mask_iban(o.get("iban"))
+    return o
+
+
+def _guard_iban_write(data: dict, can_fin: bool, creating: bool = False) -> None:
+    """Ohne finance:read darf eine gespeicherte IBAN weder überschrieben noch maskiert gespeichert werden: maskierte Werte (Formular-Roundtrip) und
+    None beim Update werden verworfen, eine neue Klartext-IBAN beim Update -> 403. Beim Anlegen (keine gespeicherte IBAN) wird nur ein maskierter Wert verworfen."""
+    if can_fin or "iban" not in data:
+        return
+    v = data["iban"]
+    if is_masked_value(v) or (v is None and not creating):
+        del data["iban"]
+    elif v is not None and not creating:
+        raise HTTPException(403, detail={"code": "forbidden", "detail": "Keine Berechtigung."})
 
 
 @router.get("/parties", dependencies=[R])
 def parties_list(role: str | None = None, q: str | None = None, active: bool | None = None, limit: int = Query(200, le=1000),
-                 offset: int = 0, db: Session = Depends(get_db)):
+                 offset: int = 0, db: Session = Depends(get_db), user: AppUser = Depends(current_user)):
     stmt = select(Party).order_by(Party.display_name)
     if role:
         stmt = stmt.join(PartyRole).where(PartyRole.role == role)
@@ -64,33 +80,39 @@ def parties_list(role: str | None = None, q: str | None = None, active: bool | N
         stmt = stmt.where(func.lower(Party.display_name).like(f"%{q.lower()}%"))
     if active is not None:
         stmt = stmt.where(Party.is_active == active)
-    return {"items": [party_out(p) for p in db.scalars(stmt.limit(limit).offset(offset))]}
+    can_fin = can_read_finance(user)
+    return {"items": [party_out(p, can_fin) for p in db.scalars(stmt.limit(limit).offset(offset))]}
 
 
 @router.post("/parties", dependencies=[W], status_code=201)
 def parties_create(body: S.PartyIn, db: Session = Depends(get_db), user: AppUser = Depends(current_user)):
     data = _dump(body, exclude={"roles"})
+    can_fin = can_read_finance(user)
+    _guard_iban_write(data, can_fin, creating=True)
     p = M.create_party(db, user.id, data, body.roles)
     db.commit()
-    return party_out(p)
+    return party_out(p, can_fin)
 
 
 @router.get("/parties/{party_id}", dependencies=[R])
-def parties_get(party_id: int, db: Session = Depends(get_db)):
+def parties_get(party_id: int, db: Session = Depends(get_db), user: AppUser = Depends(current_user)):
     p = M.get_or_404(db, Party, party_id, "Partei")
+    can_fin = can_read_finance(user)
     leases = db.scalars(select(Lease).join(L.LeaseParty).where(L.LeaseParty.party_id == p.id).order_by(Lease.start_date.desc())).all()
     history = db.scalars(select(AuditEvent).where(AuditEvent.entity_type == "party", AuditEvent.entity_id == str(p.id))
                          .order_by(AuditEvent.occurred_at.desc()).limit(50)).all()
-    return {**party_out(p), "leases": [lease_brief(db, x) for x in leases],
-            "history": [{"at": js(h.occurred_at), "action": h.action, "summary": h.summary} for h in history]}
+    return {**party_out(p, can_fin), "leases": [lease_brief(db, x) for x in leases],
+            "history": [{"at": js(h.occurred_at), "action": h.action, "summary": h.summary} for h in H.filter_audit(db, list(history), can_fin)]}
 
 
 @router.patch("/parties/{party_id}", dependencies=[W])
 def parties_patch(party_id: int, body: S.PartyPatch, db: Session = Depends(get_db), user: AppUser = Depends(current_user)):
     data = _dump(body, exclude_unset=True, exclude={"roles"})
+    can_fin = can_read_finance(user)
+    _guard_iban_write(data, can_fin)
     p = M.update_party(db, user.id, party_id, data, body.roles)
     db.commit()
-    return party_out(p)
+    return party_out(p, can_fin)
 
 
 # --- Objekte / Raumhierarchie ----------------------------------------------------------------------------------
@@ -247,10 +269,14 @@ def lease_brief(db: Session, lease: Lease) -> dict:
             "parties": [{"party_id": p.party_id, "name": p.party.display_name, "role": p.role} for p in lease.parties]}
 
 
-def lease_detail(db: Session, lease: Lease) -> dict:
+def lease_detail(db: Session, lease: Lease, can_fin: bool = True) -> dict:
+    """can_fin=False (finance:read fehlt): ohne deposit_amount (Kaution). terms/monthly_total/utility_agreements bleiben (Vertragskonditionen = Stammdaten, Entscheidung offen)."""
     today = date.today()
     ref = today if lease.start_date <= today else lease.start_date
-    return {**ser(lease), **lease_brief(db, lease),
+    base = ser(lease)
+    if not can_fin:
+        base.pop("deposit_amount", None)
+    return {**base, **lease_brief(db, lease),
             "items": [{"rentable_unit_id": i.rentable_unit_id, "label": M.space_label(db, i.rentable_unit), "level": i.rentable_unit.level} for i in lease.items],
             "terms": [ser(t) for t in lease.terms], "utility_agreements": [ser(a) for a in lease.utility_agreements],
             "notes": [ser(n) for n in db.scalars(select(LeaseNote).where(LeaseNote.lease_id == lease.id).order_by(LeaseNote.id))],
@@ -279,12 +305,12 @@ def leases_create(body: S.LeaseIn, db: Session = Depends(get_db), user: AppUser 
     lease = L.create_lease(db, user.id, parties=[p.model_dump() for p in body.parties],
                            rentable_unit_ids=body.rentable_unit_ids, **d)
     db.commit()
-    return lease_detail(db, lease)
+    return lease_detail(db, lease, can_read_finance(user))
 
 
 @router.get("/leases/{lease_id}", dependencies=[R])
-def leases_get(lease_id: int, db: Session = Depends(get_db)):
-    return lease_detail(db, M.get_or_404(db, Lease, lease_id, "Vertrag"))
+def leases_get(lease_id: int, db: Session = Depends(get_db), user: AppUser = Depends(current_user)):
+    return lease_detail(db, M.get_or_404(db, Lease, lease_id, "Vertrag"), can_read_finance(user))
 
 
 @router.patch("/leases/{lease_id}", dependencies=[W])
@@ -292,7 +318,7 @@ def leases_patch(lease_id: int, body: S.LeasePatch, db: Session = Depends(get_db
     lease = L.update_lease(db, user.id, lease_id, _dump(body, exclude_unset=True))
     impact = getattr(lease, "_impact", [])
     db.commit()
-    out = lease_detail(db, lease)
+    out = lease_detail(db, lease, can_read_finance(user))
     if impact:
         out["impact"] = {"charges_outside_period": impact, "message": f"{len(impact)} bereits erzeugte Sollstellung(en) liegen außerhalb der neuen Laufzeit. Sie wurden NICHT verändert und müssen bei Bedarf einzeln storniert werden."}
     return out
@@ -328,7 +354,7 @@ def leases_note(lease_id: int, body: S.NoteIn, db: Session = Depends(get_db), us
 def leases_legal(lease_id: int, body: S.LegalReviewIn, db: Session = Depends(get_db), user: AppUser = Depends(current_user)):
     lease = L.set_legal_review(db, user.id, lease_id, body.status, basis_ref=body.basis_ref, basis_note=body.basis_note)
     db.commit()
-    return lease_detail(db, lease)
+    return lease_detail(db, lease, can_read_finance(user))
 
 
 @router.post("/leases/{lease_id}/activate", dependencies=[W])
@@ -339,21 +365,21 @@ def leases_activate(lease_id: int, db: Session = Depends(get_db), user: AppUser 
         db.rollback()
         raise
     db.commit()
-    return {**lease_detail(db, lease), "activation_warnings": js(v.as_dict())}
+    return {**lease_detail(db, lease, can_read_finance(user)), "activation_warnings": js(v.as_dict())}
 
 
 @router.post("/leases/{lease_id}/terminate", dependencies=[W])
 def leases_terminate(lease_id: int, body: S.TerminateIn, db: Session = Depends(get_db), user: AppUser = Depends(current_user)):
     lease = L.terminate_lease(db, user.id, lease_id, terminated_on=body.terminated_on, effective_on=body.effective_on)
     db.commit()
-    return lease_detail(db, lease)
+    return lease_detail(db, lease, can_read_finance(user))
 
 
 @router.post("/leases/{lease_id}/cancel", dependencies=[W])
 def leases_cancel(lease_id: int, body: S.CancelIn, db: Session = Depends(get_db), user: AppUser = Depends(current_user)):
     lease = L.cancel_lease(db, user.id, lease_id, body.reason)
     db.commit()
-    return lease_detail(db, lease)
+    return lease_detail(db, lease, can_read_finance(user))
 
 
 # --- Mieterübersicht ---------------------------------------------------------------------------------------------------
@@ -412,7 +438,7 @@ def tenant_overview(party_id: int, db: Session = Depends(get_db), user: AppUser 
     o = TO.overview(db, party_id, include_finance=can_fin)  # ohne finance:read werden Finanzdaten gar nicht erst abgefragt
     doc = lambda d: {"id": d.id, "original_name": d.original_name, "doc_type": d.doc_type, "size": d.size, "uploaded_at": d.uploaded_at}
     fin = {"finance": o["finance"]} if can_fin else {}  # Schlüssel 'finance' fehlt ohne Recht vollständig
-    return js({"party": party_out(o["party"]), "leases": o["leases"], **fin, "documents": [doc(d) for d in o["documents"]],
+    return js({"party": party_out(o["party"], can_fin), "leases": o["leases"], **fin, "documents": [doc(d) for d in o["documents"]],
                "tasks": [{"id": t.id, "title": t.title, "status": t.status, "priority": t.priority, "due_date": t.due_date, "lease_id": t.lease_id} for t in o["tasks"]],
                "repairs": [{"id": r.id, "title": r.title, "status": r.status, "priority": r.priority, "reported_on": r.reported_on} for r in o["repairs"]],
                "activity": [{"at": a["at"], "summary": a["summary"], "actor": a["actor"], "source": a["source"]} for a in o["activity"]]})

@@ -44,16 +44,21 @@ def upload(db: Session, store: FileStore, actor_id: int | None, *, stream: Binar
     return doc
 
 
-def for_entity(db: Session, entity_type: str, entity_id: int, include_deleted: bool = False) -> list[Document]:
+def for_entity(db: Session, entity_type: str, entity_id: int, include_deleted: bool = False, exclude_types=None) -> list[Document]:
+    """exclude_types: Dokumenttypen, die der Aufrufer nicht sehen darf (Finanztypen ohne finance:read)."""
     stmt = select(Document).join(DocumentLink).where(DocumentLink.entity_type == entity_type, DocumentLink.entity_id == entity_id).order_by(Document.id)
     if not include_deleted:
         stmt = stmt.where(Document.deleted_at.is_(None))
+    if exclude_types:
+        stmt = stmt.where(Document.doc_type.not_in(sorted(exclude_types)))
     return list(db.scalars(stmt))
 
 
 def query(db: Session, *, q: str | None = None, doc_type: str | None = None, entity_type: str | None = None, entity_id: int | None = None,
-          include_deleted: bool = False, limit: int = 500) -> list[Document]:
+          include_deleted: bool = False, limit: int = 500, exclude_types=None) -> list[Document]:
     stmt = select(Document).order_by(Document.id.desc())
+    if exclude_types:
+        stmt = stmt.where(Document.doc_type.not_in(sorted(exclude_types)))
     if entity_type:
         stmt = stmt.join(DocumentLink).where(DocumentLink.entity_type == entity_type)
         if entity_id is not None:

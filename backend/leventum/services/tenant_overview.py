@@ -9,6 +9,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from leventum import domain
+from leventum.security.finance_access import FINANCE_DOC_TYPES
 from leventum.models import (Charge, Deposit, Document, DocumentLink, Lease, LeaseItem, LeaseParty, Party, Payment, PaymentAllocation, Repair, Task)
 from leventum.services import deposits as dep, history as H, leases as L, master as M
 from leventum.services.charges import arrears_bulk
@@ -61,13 +62,15 @@ def overview(db: Session, party_id: int, today: date | None = None, include_fina
                               .join(PaymentAllocation, PaymentAllocation.payment_id == Payment.id).join(Charge, Charge.id == PaymentAllocation.charge_id)
                               .where(Charge.lease_id.in_(sub_ids), Payment.direction == "in").group_by(Payment.id).order_by(Payment.booking_date.desc(), Payment.id.desc()).limit(LIMIT)).all()
         payments = [{"payment_id": i, "booking_date": bd, "amount": a, "is_reversal": rev, "allocated": q(Decimal(al))} for i, bd, a, rev, al in pay_rows]
-    docs = db.scalars(select(Document).join(DocumentLink).where(Document.deleted_at.is_(None), or_(
+    doc_stmt = select(Document).join(DocumentLink).where(Document.deleted_at.is_(None), or_(
         (DocumentLink.entity_type == "party") & (DocumentLink.entity_id == party_id), (DocumentLink.entity_type == "lease") & (DocumentLink.entity_id.in_(lids or [-1]))))
-        .order_by(Document.id.desc()).limit(LIMIT)).unique().all()
+    if not include_finance:  # Finanzdokumente (Rechnung, BK-Abrechnung, Kaution) ohne finance:read ausblenden
+        doc_stmt = doc_stmt.where(Document.doc_type.not_in(sorted(FINANCE_DOC_TYPES)))
+    docs = db.scalars(doc_stmt.order_by(Document.id.desc()).limit(LIMIT)).unique().all()
     tasks = db.scalars(select(Task).where(Task.status.in_(domain.TASK_OPEN), or_(Task.party_id == party_id, Task.lease_id.in_(lids or [-1]))).order_by(Task.due_date.is_(None), Task.due_date).limit(LIMIT)).all()
     repairs = db.scalars(select(Repair).where(or_(Repair.reported_by_party_id == party_id, Repair.lease_id.in_(lids or [-1]))).order_by(Repair.reported_on.desc()).limit(LIMIT)).all()
     out = {"party": party, "roles": sorted(r.role for r in party.roles), "leases": lease_out,
-           "documents": docs, "tasks": tasks, "repairs": repairs, "activity": H.party_timeline(db, party_id, limit=LIMIT)}
+           "documents": docs, "tasks": tasks, "repairs": repairs, "activity": H.party_timeline(db, party_id, limit=LIMIT, include_finance=include_finance)}
     if include_finance:
         out["finance"] = {"open_total": open_total, "overdue_total": overdue_total, "open_items": open_items, "recent_payments": payments,
                           "monthly_soll_total": q(sum((x["monthly"]["total"] for x in lease_out if x["phase"] in ("active", "notice") and x["kind"] == "sub" and x["monthly"].get("available")), Decimal(0)))}
