@@ -11,7 +11,8 @@ interface Overview {
   party: { id: number; display_name: string; email: string | null; phone: string | null; city: string | null; street?: string | null; postal_code?: string | null };
   leases: { id: number; kind: string; role: string; type: string; phase: string; start_date: string; end_date: string | null; spaces: string[]; monthly: { available: boolean; total?: string }; payment_rhythm: string; payment_status: string | null; overdue_amount: string | null;
     deposit: { agreed_amount: string; paid: string; open: string; held: string; status: string } | null }[];
-  finance: { open_total: string; overdue_total: string; monthly_soll_total: string; open_items: { charge_id: number; charge_type: string; period_start: string; due_date: string; amount: string; open_amount: string; overdue: boolean }[];
+  /** Fehlt ohne Finanzrecht (Schlüssel wird serverseitig weggelassen). */
+  finance?: { open_total: string; overdue_total: string; monthly_soll_total: string; open_items: { charge_id: number; charge_type: string; period_start: string; due_date: string; amount: string; open_amount: string; overdue: boolean }[];
     recent_payments: { payment_id: number; booking_date: string; amount: string; is_reversal: boolean; allocated: string }[] };
   documents: { id: number; original_name: string; doc_type: string }[];
   tasks: { id: number; title: string; status: string; due_date: string | null }[];
@@ -43,6 +44,7 @@ export default function TenantPanel({ partyId, onClose }: { partyId: number; onC
             {l.deposit && <div className="muted">Kaution (außerhalb der Mietforderungen): vereinbart {eur(l.deposit.agreed_amount)}, gezahlt {eur(l.deposit.paid)}, gehalten {eur(l.deposit.held)} – {DEP[l.deposit.status] ?? l.deposit.status}</div>}
           </div>))}
 
+        {data.finance && <>
         <h3>Offene Posten</h3>
         <p>Offen gesamt <strong>{eur(data.finance.open_total)}</strong> · davon überfällig <strong>{eur(data.finance.overdue_total)}</strong></p>
         {data.finance.open_items.length > 0 && <table><thead><tr><th>Art</th><th>Zeitraum</th><th>Fällig</th><th>Offen</th></tr></thead>
@@ -50,6 +52,7 @@ export default function TenantPanel({ partyId, onClose }: { partyId: number; onC
 
         <h3>Letzte Zahlungen</h3>
         {data.finance.recent_payments.length === 0 ? <p className="muted">Keine zugeordneten Zahlungen.</p> : <ul className="plain">{data.finance.recent_payments.map((p) => <li key={p.payment_id}>{dateDe(p.booking_date)} · {eur(p.amount)}{p.is_reversal && " (Storno)"}</li>)}</ul>}
+        </>}
 
         <h3>Dokumente</h3>
         {data.documents.length === 0 ? <p className="muted">Keine Dokumente.</p> : <ul className="plain">{data.documents.map((d) => <li key={d.id}><a className="link" href={`/api/v1/documents/${d.id}/download`}>{d.original_name}</a></li>)}</ul>}

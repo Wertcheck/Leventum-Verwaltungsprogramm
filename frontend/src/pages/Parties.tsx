@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, ApiError } from "../lib/api";
 import { dateDe, eur, useFetch } from "../lib/hooks";
@@ -8,7 +8,7 @@ import EditDialog from "../components/EditDialog";
 import TenantPanel, { PHASE } from "../components/TenantPanel";
 
 interface Party { id: number; display_name: string; kind: string; email: string | null; phone: string | null; city: string | null; roles: string[]; is_active: boolean }
-interface TenantRow { party_id: number; name: string; lease_id: number | null; lease_status?: string; spaces?: string[]; start_date?: string; end_date?: string | null; monthly_total?: { available: boolean; total?: string } | null; payment_status?: string | null; overdue_amount?: string; last_activity: string | null }
+interface TenantRow { party_id: number; name: string; lease_id: number | null; lease_status?: string; spaces?: string[]; start_date?: string; end_date?: string | null; monthly_total?: { available: boolean; total?: string } | null; payment_status?: string | null; overdue_amount?: string | null; last_activity: string | null }
 const STATUS: Record<string, [string, "ok" | "warn" | "err"]> = { active: ["Aktiv", "ok"], terminated: ["Kündigung", "warn"], ended: ["Beendet", "err"], draft: ["Entwurf", "warn"] };
 
 function PartyForm({ role, onDone }: { role: string; onDone: () => void }) {
@@ -43,6 +43,10 @@ export function TenantsPage() {
   const sel = params.get("mieter") ? Number(params.get("mieter")) : null;
   const [status, setStatus] = useState(""), [q, setQ] = useState(""), [open, setOpen] = useState(false);
   const { data, error, reload } = useFetch<{ items: TenantRow[]; total: number; limit: number }>(`/tenants?${new URLSearchParams({ ...(status && { status }), ...(q && { q }) })}`);
+  // Heuristik: Der Filter „Mit Rückstand“ braucht Finanzrechte. Ohne finance:read liefert das Backend payment_status = null für jede Zeile.
+  // Sobald (in dieser Sitzung) irgendeine Zeile einen Zahlungsstatus hat, ist das Recht belegt; ohne Beleg (auch bei leerer Liste) wird der Filter nicht angeboten.
+  const [hasFinance, setHasFinance] = useState(false);
+  useEffect(() => { if (data?.items.some((r) => r.payment_status != null)) setHasFinance(true); }, [data]);
   const select = (id: number | null) => { const n = new URLSearchParams(params); if (id) n.set("mieter", String(id)); else n.delete("mieter"); setParams(n, { replace: true }); };
   return (
     <>
@@ -51,7 +55,7 @@ export function TenantsPage() {
         <Card>
           <div className="toolbar">
             <input className="field" placeholder="Mieter suchen …" aria-label="Mieter suchen" value={q} onChange={(e) => setQ(e.target.value)} />
-            <Select value={status} onChange={setStatus} empty="Alle Status" options={[{ value: "active", label: "Aktiv" }, { value: "upcoming", label: "Anstehend" }, { value: "notice", label: "Gekündigt (läuft noch)" }, { value: "ended", label: "Beendet" }, { value: "draft", label: "Entwurf" }, { value: "arrears", label: "Mit Rückstand" }]} />
+            <Select value={status} onChange={setStatus} empty="Alle Status" options={[{ value: "active", label: "Aktiv" }, { value: "upcoming", label: "Anstehend" }, { value: "notice", label: "Gekündigt (läuft noch)" }, { value: "ended", label: "Beendet" }, { value: "draft", label: "Entwurf" }, ...(hasFinance || status === "arrears" ? [{ value: "arrears", label: "Mit Rückstand" }] : [])]} />
             <div className="grow" /><button className="btn primary" onClick={() => setOpen(true)}>Mieter anlegen</button>
           </div>
           {error && <div className="alert err">{error}</div>}
@@ -96,7 +100,7 @@ export function PartyDetail() {
   const { id } = useParams();
   const hist = useFetch<{ items: { at: string; summary: string; actor: string | null; source: string }[] }>(`/history?entity_type=party&entity_id=${id}`);
   const [editing, setEditing] = useState(false);
-  const { data, error, reload } = useFetch<Party & { leases: { id: number; kind: string; status: string; type: string; spaces: string[]; start_date: string; end_date: string | null }[]; history: { at: string; summary: string }[]; notes: string | null }>(`/parties/${id}`);
+  const { data, error, reload } = useFetch<Party & { leases: { id: number; kind: string; status: string; type: string; spaces: string[]; start_date: string; end_date: string | null }[]; history: { at: string; summary: string }[]; notes: string | null; iban?: string | null }>(`/parties/${id}`);
   if (error) return <div className="alert err">{error}</div>;
   if (!data) return null;
   return (
@@ -105,7 +109,7 @@ export function PartyDetail() {
       <div className="toolbar"><button className="btn" onClick={() => setEditing(true)}>Stammdaten bearbeiten</button></div>
       {editing && <EditDialog title="Stammdaten bearbeiten" path={`/parties/${data.id}`} initial={data as unknown as Record<string, unknown>} onClose={() => setEditing(false)} onSaved={reload}
         note="Änderungen werden mit Vorher/Nachher im Protokoll festgehalten (IBAN und Geburtsdatum maskiert)."
-        fields={[{ key: "first_name", label: "Vorname" }, { key: "last_name", label: "Nachname" }, { key: "company_name", label: "Firmenname" }, { key: "email", label: "E-Mail" }, { key: "phone", label: "Telefon" }, { key: "street", label: "Straße" }, { key: "postal_code", label: "PLZ" }, { key: "city", label: "Ort" }, { key: "iban", label: "IBAN" }]} />}
+        fields={[{ key: "first_name", label: "Vorname" }, { key: "last_name", label: "Nachname" }, { key: "company_name", label: "Firmenname" }, { key: "email", label: "E-Mail" }, { key: "phone", label: "Telefon" }, { key: "street", label: "Straße" }, { key: "postal_code", label: "PLZ" }, { key: "city", label: "Ort" }, { key: "iban", label: "IBAN", hint: String(data.iban ?? "").startsWith("•") ? "Aus Datenschutzgründen maskiert. Nur ausfüllen, wenn die IBAN tatsächlich geändert werden soll." : undefined }]} />}
       <div className="grid two-col">
         <Card><div className="card-head"><h2>Verträge</h2></div>
           {data.leases.length === 0 ? <EmptyState title="Keine Verträge" /> : <table><thead><tr><th>Art</th><th>Mietgegenstand</th><th>Zeitraum</th><th>Status</th></tr></thead>

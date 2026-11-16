@@ -121,3 +121,9 @@ ul.plain { list-style: none; padding: 0; margin: 0; } ul.plain li { padding: 3px
 td.num, th.num { overflow-wrap: normal; }
 .form-grid > * { min-width: 0; } .modal select, .modal input.field, .modal textarea { max-width: 100%; min-width: 0; }
 label.check { display: inline-flex; align-items: center; gap: 8px; font-weight: 400; } label.check input { width: auto; flex: none; }
+/* Phase I: Stichtag-Auswahl, Kennzeichnung „aktueller Stand“, Stand-Zeile */
+.stichtag-bar label { flex-direction: row; align-items: center; gap: 10px; }
+.stichtag-bar input.field { min-width: 160px; width: auto; }
+.kpi .kpi-badge { font-size: 11px; padding: 2px 8px; margin-top: 4px; white-space: normal; }
+.stichtag-line { font-size: 13px; margin: 0 0 10px; }
+.stichtag-banner details { margin-top: 6px; } .stichtag-banner ul { margin: 6px 0 0 18px; padding: 0; }

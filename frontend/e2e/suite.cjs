@@ -143,7 +143,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     if (await p.locator("input[autocomplete=username]").count()) { await p.fill("input[autocomplete=username]", "admin"); await p.fill("input[type=password]", PW); await p.click("button.primary"); await p.waitForSelector("text=Guten Tag"); }
     expect((await api("GET", "/parties?role=tenant")).items.length === before, "Daten nicht zurückgesetzt");
   });
-  await test("16 Responsive: kein Seitenüberlauf, keine abgeschnittenen KPI-Werte (4 Viewports × 6 Seiten)", async () => {
+  await test("16 Responsive: kein Seitenüberlauf, keine abgeschnittenen KPI-Werte (4 Viewports × 6 Seiten + Dashboard mit Stichtag)", async () => {
     const bad = [];
     for (const [w, h] of [[1536, 1024], [1366, 768], [1280, 800], [1024, 768]]) {
       await p.setViewportSize({ width: w, height: h });
@@ -152,6 +152,14 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
         const r = await p.evaluate(() => ({ x: document.documentElement.scrollWidth - document.documentElement.clientWidth, c: [...document.querySelectorAll(".kpi .value")].filter((e) => e.scrollWidth > e.clientWidth + 1).length }));
         if (r.x > 1 || r.c) bad.push(`${w}x${h} ${pg} x=${r.x} clipped=${r.c}`);
       }
+    }
+    const d = new Date(Date.now() - 30 * 864e5), past = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    for (const [w, h] of [[1536, 1024], [1366, 768], [1280, 800], [1024, 768]]) {  // Dashboard mit Stichtag-Auswahl, Banner und Badges
+      await p.setViewportSize({ width: w, height: h }); await p.goto(base + "/"); await p.waitForSelector("#stichtag-input");
+      await p.fill("#stichtag-input", past); await p.waitForSelector("[data-testid=stichtag-banner]"); await p.waitForLoadState("networkidle");
+      const r = await p.evaluate(() => ({ x: document.documentElement.scrollWidth - document.documentElement.clientWidth, c: [...document.querySelectorAll(".kpi .value, .kpi .kpi-badge")].filter((e) => e.scrollWidth > e.clientWidth + 1).length }));
+      if (r.x > 1 || r.c) bad.push(`${w}x${h} / (Stichtag) x=${r.x} clipped=${r.c}`);
+      await p.screenshot({ path: path.join(os.tmpdir(), `e2e-stichtag-${w}.png`) });
     }
     await p.setViewportSize({ width: 1536, height: 1024 }); expect(bad.length === 0, bad.join("; "));
   });
@@ -180,7 +188,25 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     await p.locator(".modal label:has-text('Ende') input").fill("2026-01-31"); await p.click(".modal button.primary");
     await p.waitForSelector("text=/NICHT verändert|nicht verändert/");
   });
-  await test("21 Keine JavaScript-Fehler während des gesamten Laufs", async () => { expect(errors.length === 0, errors.slice(0, 3).join(" | ")); });
+  await test("21 Dashboard-Stichtag: Auswahl, Banner, 'Heute' setzt zurück, Zukunftsdatum nicht wählbar", async () => {
+    const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const today = iso(new Date()), past = iso(new Date(Date.now() - 30 * 864e5)), [py, pm, pd] = past.split("-");
+    await p.goto(base + "/"); await p.waitForSelector("[data-testid=stichtag-picker]");
+    expect((await p.getAttribute("#stichtag-input", "max")) === today, "max ist nicht heute");
+    expect((await p.locator("[data-testid=stichtag-banner]").count()) === 0, "Banner ohne Stichtag");
+    await p.fill("#stichtag-input", past); await p.waitForSelector("[data-testid=stichtag-banner]");
+    const banner = await p.textContent("[data-testid=stichtag-banner]");
+    expect(banner.includes(`Historische Auswertung zum ${pd}.${pm}.${py}`) && banner.includes("nicht alle Kennzahlen sind historisch verfügbar"), "Bannertext: " + banner.slice(0, 120));
+    expect((await p.locator(".kpi .kpi-badge:has-text('aktueller Stand')").count()) > 0, "Keine Kennzeichnung 'aktueller Stand' für nicht-historische Kennzahlen");
+    await p.fill("#stichtag-input", "2999-01-01"); await p.waitForSelector("[data-testid=stichtag-msg]");
+    expect((await p.inputValue("#stichtag-input")) === past, "Zukunftsdatum wurde übernommen");
+    expect((await p.textContent("[data-testid=stichtag-banner]")).includes(`${pd}.${pm}.${py}`), "Stichtag nach Zukunftsdatum verändert");
+    await p.click("button:has-text('Heute')"); await p.waitForFunction(() => !document.querySelector("[data-testid=stichtag-banner]"));
+    expect((await p.inputValue("#stichtag-input")) === today, "Feld nicht auf heute zurückgesetzt");
+    expect((await p.locator(".kpi .kpi-badge").count()) === 0, "Badge nach Zurücksetzen noch sichtbar");
+    ctxState.pastDay = past;
+  });
+  await test("22 Keine JavaScript-Fehler während des gesamten Laufs", async () => { expect(errors.length === 0, errors.slice(0, 3).join(" | ")); });
 
   await b.close(); srv.kill(); fs.rmSync(data, { recursive: true, force: true });
   const failed = results.filter((r) => !r[0]);

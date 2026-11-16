@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { api, ApiError } from "../lib/api";
+import { api, ApiError, type StichtagMeta } from "../lib/api";
 import { dateDe, eur, useFetch } from "../lib/hooks";
-import { Badge, Card, EmptyState, PageHeader } from "../components/ui";
+import { Badge, Card, EmptyState, PageHeader, StichtagLine } from "../components/ui";
 import { Modal } from "../components/Form";
 import { useDialogs } from "../components/Dialogs";
 
@@ -40,7 +40,7 @@ export function NoticeEditor({ id, onClose }: { id: number; onClose: () => void 
 }
 
 export default function DunningPage() {
-  const cands = useFetch<{ items: Cand[]; note: string; summary: Summary; min_days_between_levels: number }>("/dunning/overdue");
+  const cands = useFetch<{ items: Cand[]; note: string; summary: Summary; min_days_between_levels: number; stichtag?: StichtagMeta }>("/dunning/overdue");
   const notices = useFetch<{ items: Notice[] }>("/dunning/notices");
   const [open, setOpen] = useState<number | null>(null), [msg, setMsg] = useState("");
   const due = cands.data?.items.filter((c) => c.state === "due") ?? [];
@@ -55,6 +55,7 @@ export default function DunningPage() {
       <p className="muted" style={{ margin: "0 0 12px" }}>Jede überfällige Position gehört zu genau einem Zustand. Eine Folgestufe wird erst nach dokumentiertem Versand der vorherigen Stufe und frühestens {cands.data?.min_days_between_levels ?? 7} Tage danach vorbereitet.</p>
       <Card>
         <div className="card-head"><h2>Überfällige Forderungen</h2><button className="btn primary" disabled={due.length === 0} onClick={prepare}>{due.length} Position(en) als Entwurf vorbereiten</button></div>
+        <StichtagLine stichtag={cands.data?.stichtag} />
         {cands.data && cands.data.items.length === 0 ? <EmptyState title="Keine überfälligen Forderungen" /> : (
           <table><thead><tr><th>Vertrag</th><th>Art</th><th>Zeitraum</th><th>Fällig</th><th>Offen (nach Teilzahlungen)</th><th>Überfällig</th><th>Nächste Stufe</th><th>Status</th></tr></thead>
             <tbody>{cands.data?.items.map((c) => <tr key={c.charge_id}><td>{c.lease_label}<div className="muted">Sollstellung #{c.charge_id}</div></td><td>{c.charge_label ?? c.charge_type}</td><td>{c.period_start ? `${dateDe(c.period_start)} – ${dateDe(c.period_end ?? "")}` : "–"}</td><td>{dateDe(c.due_date)}</td><td>{eur(c.open_amount)}</td><td>{c.days_overdue} Tage</td><td>{c.state === "max_level_reached" ? "–" : c.proposed_level}</td><td>{STATE[c.state]}</td></tr>)}</tbody></table>)}

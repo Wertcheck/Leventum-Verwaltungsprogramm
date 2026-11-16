@@ -1,20 +1,20 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { api, ApiError } from "../lib/api";
+import { api, ApiError, type StichtagMeta } from "../lib/api";
 import { dateDe, eur, useFetch } from "../lib/hooks";
-import { Badge, Card, EmptyState, PageHeader } from "../components/ui";
+import { Badge, Card, EmptyState, PageHeader, StichtagLine } from "../components/ui";
 import { Field, Modal, Select, Text } from "../components/Form";
 import { useDialogs } from "../components/Dialogs";
 
 export interface ChargeRow { id: number; lease_id: number; lease_label: string; direction: string; charge_type: string; period_start: string; due_date: string; amount: string; open_amount: string | null; allocated: string; status: string }
-interface PaymentRow { id: number; direction: string; booking_date: string; amount: string; signed_amount: string; is_reversal: boolean; reversed: boolean; allocated: string; unallocated: string; reference: string | null; source: string }
+interface PaymentRow { id: number; direction: string; booking_date: string; amount: string; signed_amount: string; is_reversal: boolean; reversed: boolean; allocated: string; unallocated: string; reference: string | null; source: string; is_future_dated?: boolean }
 export const CHARGE_LABEL: Record<string, string> = { base_rent: "Kaltmiete", other_charges: "Zuschlag", utility_prepayment: "NK-Vorauszahlung", utility_flat_rate: "NK-Pauschale", other: "Sonstige" };
 const ST: Record<string, [string, "ok" | "warn" | "err"]> = { open: ["Offen", "warn"], partial: ["Teilzahlung", "warn"], paid: ["Bezahlt", "ok"], voided: ["Storniert", "err"] };
 
 export default function FinancePage() {
   const { ask } = useDialogs();
   const [dir, setDir] = useState(""), [status, setStatus] = useState(""), [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
-  const charges = useFetch<{ items: ChargeRow[] }>(`/charges?${new URLSearchParams({ ...(dir && { direction: dir }), ...(status && { status }), ...(month && { month }) })}`);
+  const charges = useFetch<{ items: ChargeRow[]; stichtag?: StichtagMeta }>(`/charges?${new URLSearchParams({ ...(dir && { direction: dir }), ...(status && { status }), ...(month && { month }) })}`);
   const pays = useFetch<{ items: PaymentRow[] }>("/payments");
   const [msg, setMsg] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
   const [open, setOpen] = useState<null | "pay" | "gen">(null);
@@ -39,6 +39,7 @@ export default function FinancePage() {
           <Select value={dir} onChange={setDir} empty="Alle" options={[{ value: "receivable", label: "Forderungen (Untermieter)" }, { value: "payable", label: "Verbindlichkeiten (Vermieter)" }]} />
           <Select value={status} onChange={setStatus} empty="Alle Status" options={[{ value: "open", label: "Offen" }, { value: "partial", label: "Teilzahlung" }, { value: "paid", label: "Bezahlt" }, { value: "overdue", label: "Überfällig" }]} />
           <Text type="month" value={month} onChange={setMonth} /><button className="btn primary" onClick={() => setOpen("gen")}>Sollstellungen erzeugen</button></div></div>
+        <StichtagLine stichtag={charges.data?.stichtag} />
         {charges.data && charges.data.items.length === 0 ? <EmptyState title="Keine Sollstellungen" /> : (
           <table><thead><tr><th>Vertrag</th><th>Art</th><th>Monat</th><th>Fällig</th><th>Betrag</th><th>Offen</th><th>Status</th></tr></thead>
             <tbody>{charges.data?.items.map((c) => <tr key={c.id}><td><Link className="link" to={`/vertraege/${c.lease_id}`}>{c.lease_label}</Link><div className="muted">{c.direction === "receivable" ? "Forderung gegen Mieter" : "Verbindlichkeit an Vermieter"}</div></td><td>{CHARGE_LABEL[c.charge_type]}</td><td>{c.period_start.slice(0, 7)}</td><td>{dateDe(c.due_date)}</td><td>{eur(c.amount)}</td><td>{eur(c.open_amount)}</td><td><Badge tone={ST[c.status][1]}>{ST[c.status][0]}</Badge></td></tr>)}</tbody></table>)}
@@ -47,9 +48,10 @@ export default function FinancePage() {
       <Card>
         <div className="card-head"><h2>Zahlungen (Ist)</h2><button className="btn primary" onClick={() => setOpen("pay")}>Zahlung erfassen</button></div>
         <p className="muted" style={{ marginBottom: 10 }}>Zahlungen sind unveränderlich. Korrekturen erfolgen per Stornobuchung. Kautionen erscheinen hier nicht.</p>
+        {pays.data?.items.some((p) => p.is_future_dated) && <p className="alert warn" role="status" data-testid="future-note">Zahlungen mit der Kennzeichnung „zukünftig gebucht“ haben ein Buchungsdatum in der Zukunft und mindern Forderungen erst ab diesem Datum.</p>}
         {pays.data && pays.data.items.length === 0 ? <EmptyState title="Keine Zahlungen" /> : (
           <table><thead><tr><th>Datum</th><th>Richtung</th><th>Betrag</th><th>Zugeordnet</th><th>Nicht zugeordnet</th><th>Verwendungszweck</th><th /></tr></thead>
-            <tbody>{pays.data?.items.map((p) => <tr key={p.id}><td>{dateDe(p.booking_date)}</td><td>{p.direction === "in" ? "Eingang" : "Ausgang"}{p.is_reversal && <> <Badge tone="err">Storno</Badge></>}{p.reversed && <> <Badge tone="warn">storniert</Badge></>}</td>
+            <tbody>{pays.data?.items.map((p) => <tr key={p.id}><td>{dateDe(p.booking_date)}</td><td>{p.direction === "in" ? "Eingang" : "Ausgang"}{p.is_reversal && <> <Badge tone="err">Storno</Badge></>}{p.reversed && <> <Badge tone="warn">storniert</Badge></>}{p.is_future_dated && <> <span className="badge neutral" title="Das Buchungsdatum liegt in der Zukunft. Die Zahlung mindert Forderungen erst ab dem Buchungsdatum.">zukünftig gebucht</span></>}</td>
               <td>{eur(p.signed_amount)}</td><td>{eur(p.allocated)}</td><td>{eur(p.unallocated)}</td><td>{p.reference ?? "–"}</td>
               <td>{!p.is_reversal && !p.reversed && <button className="btn small danger" onClick={async () => { const r = await ask("Begründung für die Stornobuchung", { title: "Zahlung stornieren", danger: true }); if (r) run(() => api(`/payments/${p.id}/reverse`, { method: "POST", json: { reason: r } }), "Zahlung storniert (Gegenbuchung)."); }}>Stornieren</button>}</td></tr>)}</tbody></table>)}
       </Card>

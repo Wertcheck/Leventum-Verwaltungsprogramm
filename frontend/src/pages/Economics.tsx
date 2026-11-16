@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { dateDe, eur, pref, useFetch } from "../lib/hooks";
-import { Card, PageHeader } from "../components/ui";
+import type { StichtagMeta } from "../lib/api";
+import { Card, PageHeader, StichtagLine } from "../components/ui";
 import { Field, Select, Text } from "../components/Form";
 
 interface Rep {
@@ -10,7 +11,7 @@ interface Rep {
   contribution: { label: string; rent_margin_soll: string; utility_flow_soll: string; soll_basis: string; ist_basis: string; utility_settlement_upstream: { balance: string; statements_counted: number } | null; soll_basis_incl_upstream_settlement: string | null };
   datenstand?: { today: string; data_as_of: string; period_extends_beyond_data_stand: boolean; note: string };
   prognose_periodenende?: { label: string; as_of: string; receivables_open_if_no_further_payments: string; receivables_overdue_if_no_further_payments: string; payables_open_if_no_further_payments: string; invoices_open_if_no_further_payments: string } | null;
-  warnings: { code: string; message: string }[]; assumptions: string[];
+  warnings: { code: string; message: string }[]; assumptions: string[]; stichtag?: StichtagMeta;
 }
 const monthEnd = (m: string) => { const [y, mo] = m.split("-").map(Number); return `${m}-${String(new Date(y, mo, 0).getDate()).padStart(2, "0")}`; };
 const Row = ({ k, v, strong }: { k: string; v: string | null | undefined; strong?: boolean }) => <><dt>{strong ? <strong>{k}</strong> : k}</dt><dd>{strong ? <strong>{eur(v)}</strong> : eur(v)}</dd></>;
@@ -34,6 +35,7 @@ export default function EconomicsPage() {
       </div></Card>
       {error && <div className="alert err">{error}</div>}
       {data && <div style={{ marginTop: 20 }}>
+        <StichtagLine stichtag={data.stichtag} />
         <div className="grid two-col">
           <Card><div className="card-head"><h2>Soll (laut Verträgen)</h2></div><dl className="kv">
             <Row k="Untermiete Kaltmiete+Zuschläge" v={data.soll.sub_rent} /><Row k="Untermiete Nebenkosten" v={data.soll.sub_utility} /><Row k="Untermiete gesamt" v={data.soll.sub_total} strong />
