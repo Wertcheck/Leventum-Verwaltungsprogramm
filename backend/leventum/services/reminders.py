@@ -33,8 +33,9 @@ def _r(key, typ, sev, title, detail, due=None, entity_type=None, entity_id=None,
     return {"key": key, "type": typ, "severity": sev, "title": title, "detail": detail, "due_date": due, "entity_type": entity_type, "entity_id": entity_id, **extra}
 
 
-def compute(db: Session, today: date | None = None, preview_days: int | None = None) -> list[dict]:
-    """preview_days: Vorschauzeitraum Vertragsenden; None -> Standard aus Settings (Aufrufer in der API reichen den App-Wert durch)."""
+def compute(db: Session, today: date | None = None, preview_days: int | None = None, include_finance: bool = True) -> list[dict]:
+    """preview_days: Vorschauzeitraum Vertragsenden; None -> Standard aus Settings (Aufrufer in der API reichen den App-Wert durch).
+    include_finance=False: Hinweise mit Finanzbezug (overdue_payment, deposit_overdue, utility_statement_due) werden gar nicht erst berechnet (Recht finance:read fehlt)."""
     today = today or date.today()
     if preview_days is None:
         from leventum.config import Settings
@@ -59,11 +60,11 @@ def compute(db: Session, today: date | None = None, preview_days: int | None = N
             out.append(_r(f"missing_doc:{l.id}:{t}", "missing_document", "warning" if t == "mietvertrag" else "info", f"{label}: Dokument fehlt ({t})",
                           "Laut Pflichtliste (organisatorische Annahme) ist kein entsprechendes Dokument zugeordnet.", None, "lease", l.id, doc_type=t))
     # überfällige Forderungen je Vertrag
-    for lid, rows in receivable_position(db, today)["overdue_by_lease"].items():  # zentrale Stichtagslogik (ADR 0002)
+    for lid, rows in (receivable_position(db, today)["overdue_by_lease"].items() if include_finance else ()):  # zentrale Stichtagslogik (ADR 0002)
         total, first = q(sum((o for _, o in rows), Decimal(0))), min(d for d, _ in rows)
         out.append(_r(f"overdue:{lid}:{first}", "overdue_payment", "critical", f"Überfällige Zahlung – {lease_title(db, db.get(Lease, lid))}: {eur(total)} offen",
                       f"{len(rows)} Sollstellung(en), älteste fällig am {first:%d.%m.%Y}. Mahnwesen prüfen.", first, "lease", lid, amount=total))
-    for d in db.scalars(select(Deposit)):
+    for d in (db.scalars(select(Deposit)) if include_finance else ()):
         lease = db.get(Lease, d.lease_id)
         s = dep.summary(d, lease, today)
         if s["overdue"]:
@@ -78,7 +79,7 @@ def compute(db: Session, today: date | None = None, preview_days: int | None = N
     # Betriebskostenabrechnung Vorjahr (Ebene A): Hauptvertrag mit Vorauszahlung, im Vorjahr aktiv, keine erfasste Abrechnung
     y = today.year - 1
     ys, ye = date(y, 1, 1), date(y, 12, 31)
-    for l in leases:
+    for l in (leases if include_finance else ()):
         if l.kind != "main" or not any(a.mode == "prepayment" for a in l.utility_agreements):
             continue
         s0, e0 = _span(l)

@@ -14,6 +14,7 @@ from leventum.api.finance import _store, doc_out
 from leventum.api.master import js, ser
 from leventum.config import Settings
 from leventum.models import AppUser, Communication, Document, HandoverProtocol, Lease, Repair, Task
+from leventum.security.finance_access import can_read_finance, is_finance_reminder_key, require_finance_read
 from leventum.services import communications as COM, documents as DOC, history as H, reminders as REM, repairs as R, tasks as T
 from leventum.services.errors import ServiceError
 from leventum.services.master import get_or_404
@@ -83,14 +84,18 @@ def tasks_status(tid: int, body: S.TaskStatusIn, db: Session = Depends(get_db), 
 
 # --- Erinnerungen -------------------------------------------------------------------------------------------------------------------
 @router.get("/reminders", dependencies=[Depends(require("dashboard:read"))])
-def reminders(db: Session = Depends(get_db), settings: Settings = Depends(get_settings)):
-    items = REM.compute(db, preview_days=settings.contract_end_preview_days)
+def reminders(db: Session = Depends(get_db), settings: Settings = Depends(get_settings), user: AppUser = Depends(current_user)):
+    # Ohne finance:read entfallen die Finanz-Hinweise (FINANCE_REMINDER_TYPES); sie werden gar nicht erst berechnet.
+    items = REM.compute(db, preview_days=settings.contract_end_preview_days, include_finance=can_read_finance(user))
     return {"items": js(items), "note": "Berechnet aus den aktuellen Daten. Fristen sind rechnerische Hinweise, keine Rechtsauskunft."}
 
 
 @router.post("/reminders/task", dependencies=[TW], status_code=201)
 def reminder_to_task(body: S.ReminderTaskIn, db: Session = Depends(get_db), user: AppUser = Depends(current_user), settings: Settings = Depends(get_settings)):
-    rem = next((r for r in REM.compute(db, preview_days=settings.contract_end_preview_days) if r["key"] == body.key), None)
+    can_fin = can_read_finance(user)
+    if not can_fin and is_finance_reminder_key(body.key):
+        require_finance_read(user)  # 403 schon anhand des Schlüsselpräfixes: keine Aussage, ob die Erinnerung existiert; keine Aufgabe
+    rem = next((r for r in REM.compute(db, preview_days=settings.contract_end_preview_days, include_finance=can_fin) if r["key"] == body.key), None)
     if rem is None:
         raise ServiceError("not_found", "Die Erinnerung besteht nicht mehr.", 404)
     if rem["task_id"]:

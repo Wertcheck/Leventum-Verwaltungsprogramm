@@ -10,7 +10,9 @@ from sqlalchemy.orm import Session
 from leventum.api.deps import COOKIE, current_user, get_db, get_settings, require
 from leventum.config import Settings
 from leventum.models import AppUser
+from leventum.security.finance_access import can_read_finance, require_finance_read
 from leventum.services import audit, auth, backup as backup_svc
+from leventum.services.errors import ServiceError
 from leventum.services.dashboard import build_dashboard
 
 public = APIRouter()      # bewusst ohne Auth: Health + Auth-Bootstrap
@@ -83,9 +85,18 @@ def auth_me(user: AppUser = Depends(current_user)):
 
 
 @protected.get("/dashboard", dependencies=[Depends(require("dashboard:read"))])
-def dashboard(as_of: date | None = Query(default=None, description="Stichtag (YYYY-MM-DD, nicht in der Zukunft); ohne Angabe heute"),
-              db: Session = Depends(get_db), settings: Settings = Depends(get_settings)):
-    return build_dashboard(db, as_of, settings.contract_end_preview_days)
+def dashboard(as_of: str | None = Query(default=None, description="Stichtag (YYYY-MM-DD, nicht in der Zukunft); ohne Angabe heute. Erfordert finance:read"),
+              db: Session = Depends(get_db), settings: Settings = Depends(get_settings), user: AppUser = Depends(current_user)):
+    can_fin = can_read_finance(user)
+    if as_of is not None and not can_fin:
+        require_finance_read(user)  # Rechteprüfung VOR jeder Stichtagsvalidierung (auch bei ungültigem/zukünftigem Wert -> 403)
+    day = None
+    if as_of is not None:
+        try:
+            day = date.fromisoformat(as_of)
+        except ValueError:
+            raise ServiceError("invalid_as_of", "Der Stichtag muss als Datum im Format JJJJ-MM-TT angegeben werden.", 422)
+    return build_dashboard(db, day, settings.contract_end_preview_days, include_finance=can_fin)
 
 
 # --- Backup (nur Administrator) -------------------------------------------------------------

@@ -543,7 +543,9 @@ def test_month_figures_computed_exactly_once_per_call_with_as_of(world, auth_cli
 
 @pytest.mark.parametrize("role", ["admin", "verwaltung", "buchhaltung", "objektbetreuung", "lesend"])
 def test_dashboard_read_permission_all_roles_with_and_without_as_of(app, auth_client, role):
-    """Jede Rolle liest /dashboard mit Statuscode 200 (ohne und mit as_of, Antwort trägt den Stichtag)."""
+    """Jede Rolle liest /dashboard ohne as_of (200). Mit as_of nur mit finance:read (admin/buchhaltung/lesend → 200 mit Stichtag, Zukunft 422);
+    verwaltung/objektbetreuung → 403, auch bei Zukunftsdatum (Rechteprüfung vor Stichtagsvalidierung). Geändert nach Eigentümerentscheidung
+    Phase I (vorher: alle Rollen 200); Details in test_i2_finance_permissions.py."""
     from sqlalchemy import select
     from leventum.models import AppUser, Role
     from leventum.security.passwords import hash_password
@@ -554,9 +556,13 @@ def test_dashboard_read_permission_all_roles_with_and_without_as_of(app, auth_cl
     assert c.post(V + "/auth/login", json={"username": f"u_{role}", "password": PW}).status_code == 200
     past = d(-7).isoformat()
     r1, r2 = c.get(V + "/dashboard"), c.get(V + "/dashboard", params={"as_of": past})
-    assert r1.status_code == 200 and r2.status_code == 200
-    assert r1.json()["as_of"] == TODAY.isoformat() and r2.json()["as_of"] == past
-    assert c.get(V + "/dashboard", params={"as_of": d(1).isoformat()}).status_code == 422  # Recht vorhanden, Zukunft weiter abgelehnt
+    assert r1.status_code == 200 and r1.json()["as_of"] == TODAY.isoformat()
+    future = c.get(V + "/dashboard", params={"as_of": d(1).isoformat()})
+    if role in ("admin", "buchhaltung", "lesend"):
+        assert r2.status_code == 200 and r2.json()["as_of"] == past
+        assert future.status_code == 422  # Recht vorhanden, Zukunft weiter abgelehnt
+    else:
+        assert r2.status_code == 403 and future.status_code == 403
 
 
 def test_dashboard_as_of_requires_same_right_as_without(app, auth_client, monkeypatch):

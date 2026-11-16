@@ -156,8 +156,10 @@ IMPLEMENTED: dict = {
 HISTORICAL_SUPPORTED = {"active_main_leases", "active_subleases", "active_tenants", "open_receivables", "overdue_payments", "upcoming_contract_ends"}
 
 
-def build_dashboard(db: Session, as_of: date | None = None, preview_days: int | None = None) -> dict:
-    """as_of=None -> heute. Zukunft -> 422. preview_days: Vorschauzeitraum Vertragsenden (None -> Standard aus Settings)."""
+def build_dashboard(db: Session, as_of: date | None = None, preview_days: int | None = None, include_finance: bool = True) -> dict:
+    """as_of=None -> heute. Zukunft -> 422. preview_days: Vorschauzeitraum Vertragsenden (None -> Standard aus Settings).
+    include_finance=False (Recht finance:read fehlt): Finanz-KPIs (FINANCE_KPI_KEYS) und Finanz-Hinweise werden weder berechnet noch ausgeliefert."""
+    from leventum.security.finance_access import FINANCE_KPI_KEYS
     today = date.today()
     if as_of is not None and as_of > today:
         raise ServiceError("as_of_in_future", "Der Stichtag darf nicht in der Zukunft liegen (keine Prognose im Dashboard).", 422)
@@ -168,6 +170,8 @@ def build_dashboard(db: Session, as_of: date | None = None, preview_days: int | 
     db.info["_as_of"] = as_of
     kpis = []
     for key, label, phase in KPI_DEFINITIONS:
+        if not include_finance and key in FINANCE_KPI_KEYS:
+            continue
         fn = IMPLEMENTED.get(key)
         if key in IMPLEMENTED_MONEY:
             kpis.append({"key": key, "label": label, "value": format(IMPLEMENTED_MONEY[key](db, as_of, preview_days), "f"), "format": "eur", "available": True, "planned_phase": phase})
@@ -182,5 +186,5 @@ def build_dashboard(db: Session, as_of: date | None = None, preview_days: int | 
     from leventum.api.master import js
     from leventum.services import reminders as rem, tasks as tk
     from leventum.api.master import ser
-    return {"as_of": as_of.isoformat(), "kpis": kpis, "warnings": js(rem.compute(db, preview_days=preview_days)[:8]),
+    return {"as_of": as_of.isoformat(), "kpis": kpis, "warnings": js(rem.compute(db, preview_days=preview_days, include_finance=include_finance)[:8]),
             "tasks": [{**ser(t), "overdue": tk.is_overdue(t)} for t in tk.query(db, open_only=True)[:5]]}

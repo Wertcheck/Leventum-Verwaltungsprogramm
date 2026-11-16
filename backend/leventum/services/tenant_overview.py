@@ -18,7 +18,9 @@ from leventum.services.utility import q
 LIMIT = 15
 
 
-def overview(db: Session, party_id: int, today: date | None = None) -> dict:
+def overview(db: Session, party_id: int, today: date | None = None, include_finance: bool = True) -> dict:
+    """include_finance=False (Recht finance:read fehlt): keine Finanzabfragen; Ergebnis ohne Schlüssel 'finance', je Vertrag payment_status/overdue_amount/deposit = None.
+    Der Soll-Wert 'monthly' (Vertragskonditionen, Stammdaten) bleibt."""
     today = today or date.today()
     party = db.get(Party, party_id)
     if party is None:
@@ -28,8 +30,8 @@ def overview(db: Session, party_id: int, today: date | None = None) -> dict:
                                selectinload(Lease.parties).joinedload(LeaseParty.party), selectinload(Lease.lease_type))).all()
     leases = sorted({l.id: (role, l) for role, l in rows}.values(), key=lambda rl: rl[1].start_date, reverse=True)
     lids = [l.id for _, l in leases]
-    arrears = arrears_bulk(db, [l.id for r, l in leases if l.kind == "sub"], today)
-    deposits = {d.lease_id: d for d in db.scalars(select(Deposit).where(Deposit.lease_id.in_(lids)).options(selectinload(Deposit.transactions)))} if lids else {}
+    arrears = arrears_bulk(db, [l.id for r, l in leases if l.kind == "sub"], today) if include_finance else {}
+    deposits = {d.lease_id: d for d in db.scalars(select(Deposit).where(Deposit.lease_id.in_(lids)).options(selectinload(Deposit.transactions)))} if lids and include_finance else {}
     lease_out = []
     for role, l in leases:
         ph = L.phase(l, today)
@@ -39,7 +41,7 @@ def overview(db: Session, party_id: int, today: date | None = None) -> dict:
                           "monthly": L.monthly_total(l, max(today, l.start_date)), "payment_rhythm": l.payment_rhythm,
                           "payment_status": arrears.get(l.id, {}).get("status"), "overdue_amount": arrears.get(l.id, {}).get("amount"),
                           "deposit": dep.summary(d, l, today) if d else None})
-    sub_ids = [l.id for _, l in leases if l.kind == "sub"]
+    sub_ids = [l.id for _, l in leases if l.kind == "sub"] if include_finance else []
     # Offene Posten (Forderungen) und letzte Zahlungseingänge
     alloc = dict(db.execute(select(PaymentAllocation.charge_id, func.sum(PaymentAllocation.amount)).where(PaymentAllocation.charge_id.is_not(None)).group_by(PaymentAllocation.charge_id)).all()) if sub_ids else {}
     open_items, open_total, overdue_total = [], Decimal("0.00"), Decimal("0.00")
@@ -64,7 +66,9 @@ def overview(db: Session, party_id: int, today: date | None = None) -> dict:
         .order_by(Document.id.desc()).limit(LIMIT)).unique().all()
     tasks = db.scalars(select(Task).where(Task.status.in_(domain.TASK_OPEN), or_(Task.party_id == party_id, Task.lease_id.in_(lids or [-1]))).order_by(Task.due_date.is_(None), Task.due_date).limit(LIMIT)).all()
     repairs = db.scalars(select(Repair).where(or_(Repair.reported_by_party_id == party_id, Repair.lease_id.in_(lids or [-1]))).order_by(Repair.reported_on.desc()).limit(LIMIT)).all()
-    return {"party": party, "roles": sorted(r.role for r in party.roles), "leases": lease_out,
-            "finance": {"open_total": open_total, "overdue_total": overdue_total, "open_items": open_items, "recent_payments": payments,
-                        "monthly_soll_total": q(sum((x["monthly"]["total"] for x in lease_out if x["phase"] in ("active", "notice") and x["kind"] == "sub" and x["monthly"].get("available")), Decimal(0)))},
-            "documents": docs, "tasks": tasks, "repairs": repairs, "activity": H.party_timeline(db, party_id, limit=LIMIT)}
+    out = {"party": party, "roles": sorted(r.role for r in party.roles), "leases": lease_out,
+           "documents": docs, "tasks": tasks, "repairs": repairs, "activity": H.party_timeline(db, party_id, limit=LIMIT)}
+    if include_finance:
+        out["finance"] = {"open_total": open_total, "overdue_total": overdue_total, "open_items": open_items, "recent_payments": payments,
+                          "monthly_soll_total": q(sum((x["monthly"]["total"] for x in lease_out if x["phase"] in ("active", "notice") and x["kind"] == "sub" and x["monthly"].get("available")), Decimal(0)))}
+    return out

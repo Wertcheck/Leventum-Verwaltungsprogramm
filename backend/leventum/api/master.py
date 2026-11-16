@@ -14,6 +14,7 @@ from leventum.api.deps import current_user, get_db, require
 from leventum.models import (AuditEvent, Bed, CostType, Lease, LeaseNote, LeaseType, Party, PartyRole, Property, RentableUnit,
                              Room, Unit, UtilityStatement, UtilityStatementUnit)
 from leventum.models import AppUser
+from leventum.security.finance_access import can_read_finance, require_finance_read
 from leventum.services import charges as C, leases as L, master as M, utility as U
 from leventum.services.errors import NotFound
 
@@ -358,10 +359,14 @@ def leases_cancel(lease_id: int, body: S.CancelIn, db: Session = Depends(get_db)
 # --- Mieterübersicht ---------------------------------------------------------------------------------------------------
 @router.get("/tenants", dependencies=[R])
 def tenants(status: str | None = None, property_id: int | None = None, q: str | None = None, limit: int = Query(200, ge=1, le=1000), offset: int = Query(0, ge=0),
-            db: Session = Depends(get_db)):
+            db: Session = Depends(get_db), user: AppUser = Depends(current_user)):
     """Eine Zeile je Mieter und Untermietvertrag (gebündelte Abfragen, paginiert). Phase = zeitbezogener Vertragszustand (upcoming|active|notice|ended|draft);
-    Zahlungsstatus: arrears = überfällige, offene Forderungen nach Teilzahlungen."""
+    Zahlungsstatus: arrears = überfällige, offene Forderungen nach Teilzahlungen. Ohne finance:read: payment_status/overdue_amount = None, status=arrears -> 403.
+    monthly_total (Soll aus den Vertragskonditionen) bleibt bewusst sichtbar: Vertragskonditionen sind Stammdaten (master:read), vgl. GET /leases/{id}."""
     from sqlalchemy.orm import selectinload
+    can_fin = can_read_finance(user)
+    if status == "arrears":
+        require_finance_read(user)  # vor jeder Auswertung
     today = date.today()
     stmt = select(Party).join(PartyRole).where(PartyRole.role == "tenant").order_by(Party.display_name)
     if q:
@@ -375,7 +380,7 @@ def tenants(status: str | None = None, property_id: int | None = None, q: str | 
             .options(selectinload(Lease.items).joinedload(L.LeaseItem.rentable_unit), selectinload(Lease.terms), selectinload(Lease.utility_agreements))).all()
         for pid, lease in rows:
             by_party[pid].append(lease)
-    arrears = C.arrears_bulk(db, [l.id for ls in by_party.values() for l in ls], today)
+    arrears = C.arrears_bulk(db, [l.id for ls in by_party.values() for l in ls], today) if can_fin else {}
     last = dict(db.execute(select(AuditEvent.entity_id, func.max(AuditEvent.occurred_at)).where(AuditEvent.entity_type == "party").group_by(AuditEvent.entity_id)).all()) if pids else {}
     out = []
     for p in parties:
@@ -386,7 +391,7 @@ def tenants(status: str | None = None, property_id: int | None = None, q: str | 
                 out.append({"party_id": p.id, "name": p.display_name, "lease_id": None, "lease_status": "no_lease", "last_activity": last_act})
             continue
         for lease in leases:
-            ar = arrears[lease.id]
+            ar = arrears[lease.id] if can_fin else {"status": None, "amount": None}
             ph = L.phase(lease, today)
             if status == "arrears" and ar["status"] != "arrears":
                 continue
@@ -401,11 +406,13 @@ def tenants(status: str | None = None, property_id: int | None = None, q: str | 
 
 
 @router.get("/tenants/{party_id}/overview", dependencies=[R])
-def tenant_overview(party_id: int, db: Session = Depends(get_db)):
+def tenant_overview(party_id: int, db: Session = Depends(get_db), user: AppUser = Depends(current_user)):
     from leventum.services import tenant_overview as TO
-    o = TO.overview(db, party_id)
+    can_fin = can_read_finance(user)
+    o = TO.overview(db, party_id, include_finance=can_fin)  # ohne finance:read werden Finanzdaten gar nicht erst abgefragt
     doc = lambda d: {"id": d.id, "original_name": d.original_name, "doc_type": d.doc_type, "size": d.size, "uploaded_at": d.uploaded_at}
-    return js({"party": party_out(o["party"]), "leases": o["leases"], "finance": o["finance"], "documents": [doc(d) for d in o["documents"]],
+    fin = {"finance": o["finance"]} if can_fin else {}  # Schlüssel 'finance' fehlt ohne Recht vollständig
+    return js({"party": party_out(o["party"]), "leases": o["leases"], **fin, "documents": [doc(d) for d in o["documents"]],
                "tasks": [{"id": t.id, "title": t.title, "status": t.status, "priority": t.priority, "due_date": t.due_date, "lease_id": t.lease_id} for t in o["tasks"]],
                "repairs": [{"id": r.id, "title": r.title, "status": r.status, "priority": r.priority, "reported_on": r.reported_on} for r in o["repairs"]],
                "activity": [{"at": a["at"], "summary": a["summary"], "actor": a["actor"], "source": a["source"]} for a in o["activity"]]})

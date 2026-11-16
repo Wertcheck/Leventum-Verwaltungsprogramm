@@ -28,3 +28,10 @@ Betroffen: zentrale Finanzdateien `services/charges.py`, `services/economics.py`
 * **F2:** `historical_supported=true` für Vertrags-KPIs gilt mit der Einschränkung A6c (vorzeitig beendete Verträge, Status `ended`, fehlen in historischen Stichtagen).
 * **Befund B (vorbestehend, nicht behoben):** `economics.Engine._open` verursacht weiterhin einen N+1 (ein `open_amount` je Forderung); Dashboard-Statements wachsen weiter mit den überfälligen Forderungen. Gemessen (Review, SQLite): `reminders.compute` 73→44 / 103→44 Statements (30/60 Forderungen), `build_dashboard` 201→150 / 321→210.
 * **F-Sec1 (Entscheidung offen):** `as_of` macht Finanzaggregate für Rollen mit `dashboard:read`, aber ohne `finance:read`, zeitlich abfragbar (vorher nur Gegenwartswerte). Sicherheitsreview: kein Veto, empfohlen wird Beschränkung auf `finance:read` oder dokumentierte Risikoakzeptanz.
+
+## Nachtrag Phase I (2026-11-16): Entscheidungen
+* **F-Sec1 entschieden:** Finanzwerte nur mit `finance:read`, serverseitig. `GET /dashboard`: ohne Recht keine Finanz-KPIs und keine Finanz-Hinweise; **`as_of` verlangt `finance:read`** (403 vor jeder Stichtagsvalidierung). `/reminders`, `/tenants`, `/tenants/{id}/overview` entsprechend gefiltert. Vertragskonditionen (`/leases/{id}`, `monthly_total`) bleiben Stammdaten (`master:read`) – **Eigentümerbestätigung offen**. `/charges/preview` bleibt lesender Dry-Run mit `finance:read`.
+* **A1 bestätigt** (Eigentümer): `open_receivables` umfasst alle offenen Forderungen unabhängig von der Fälligkeit; neu getrennt `overdue_receivables`.
+* **A2 bestätigt** (Eigentümer): Haupt- und Untermietverträge, getrennt ausgewiesen plus Summe.
+* **A8 aufgelöst** (Eigentümer, Vorgabe 2.3): Zahlungen wirken auch in aktuellen Ansichten erst ab Buchungsdatum; die Zuordnungs-Obergrenze beim Buchen (`payments.allocate`) bleibt unverändert (alle bestehenden Zuordnungen zählen).
+* **Storno (F1):** keine Änderung ohne separate fachliche Analyse (`docs/PHASE_I_STORNO_ANALYSE.md`); keine Klemmung offener Forderungen.
