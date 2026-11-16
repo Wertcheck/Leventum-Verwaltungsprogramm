@@ -12,7 +12,7 @@ from leventum import domain
 from leventum.security.finance_access import FINANCE_DOC_TYPES
 from leventum.models import (Charge, Deposit, Document, DocumentLink, Lease, LeaseItem, LeaseParty, Party, Payment, PaymentAllocation, Repair, Task)
 from leventum.services import deposits as dep, history as H, leases as L, master as M
-from leventum.services.charges import arrears_bulk
+from leventum.services.charges import allocated_by_charge, arrears_bulk
 from leventum.services.errors import NotFound
 from leventum.services.utility import q
 
@@ -44,7 +44,8 @@ def overview(db: Session, party_id: int, today: date | None = None, include_fina
                           "deposit": dep.summary(d, l, today) if d else None})
     sub_ids = [l.id for _, l in leases if l.kind == "sub"] if include_finance else []
     # Offene Posten (Forderungen) und letzte Zahlungseingänge
-    alloc = dict(db.execute(select(PaymentAllocation.charge_id, func.sum(PaymentAllocation.amount)).where(PaymentAllocation.charge_id.is_not(None)).group_by(PaymentAllocation.charge_id)).all()) if sub_ids else {}
+    # Zahlungen wirken erst ab ihrem Buchungsdatum (Stichtag heute) – wie Dashboard, Forderungsliste und Mahnwesen (Entscheidung Phase I 2.3; Review-Befund F-1)
+    alloc = allocated_by_charge(db, None, today) if sub_ids else {}
     open_items, open_total, overdue_total = [], Decimal("0.00"), Decimal("0.00")
     if sub_ids:
         for c in db.scalars(select(Charge).where(Charge.lease_id.in_(sub_ids), Charge.direction == "receivable", Charge.voided_at.is_(None)).order_by(Charge.due_date)):
