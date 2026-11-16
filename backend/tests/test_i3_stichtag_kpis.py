@@ -1013,15 +1013,207 @@ def test_all_views_agree_historical(fin, auth_client):
 
 
 # ---------------------------------------------------------------------------------------------------------------------------------
+# Eingefrorene "heutige" Zeit für neue Tests (keine Abhängigkeit von Echtzeit/Mitternacht): ersetzt `date` im Modul stichtag
+# ---------------------------------------------------------------------------------------------------------------------------------
+FROZEN = date(2027, 6, 1)
+
+
+class _FrozenMeta(type):
+    def __instancecheck__(cls, obj):  # echte date-Objekte bleiben date (resolve() nutzt isinstance(raw, date))
+        return isinstance(obj, date)
+
+
+class FrozenDate(date, metaclass=_FrozenMeta):
+    @classmethod
+    def today(cls):
+        return FROZEN
+
+    @classmethod
+    def fromisoformat(cls, text):  # liefert echtes date, kein Subklassenobjekt
+        return date.fromisoformat(text)
+
+
+@pytest.fixture
+def frozen(monkeypatch):
+    from leventum.services import stichtag as ST
+    monkeypatch.setattr(ST, "date", FrozenDate)
+    return FROZEN
+
+
+def test_frozen_fixture_resolve_semantics(frozen):
+    """Absicherung der Test-Hilfe selbst: None -> FROZEN; date/ISO-Text korrekt; Zukunft relativ zu FROZEN."""
+    ST = stichtag()
+    st = ST.resolve(None)
+    assert (st.as_of, st.today) == (FROZEN, FROZEN) and type(st.as_of) is date
+    assert ST.resolve(date(2027, 6, 1)).as_of == FROZEN and ST.resolve("2027-05-31").mode == "historical"
+    assert ST.resolve(date(2027, 5, 31)).is_historical is True
+    for raw in (date(2027, 6, 2), "2027-06-02"):
+        with pytest.raises(ServiceError) as ei:
+            ST.resolve(raw)
+        assert ei.value.code == "as_of_in_future" and ei.value.status == 422
+
+
+# ---------------------------------------------------------------------------------------------------------------------------------
 # Review M2: POST /dunning/prepare lehnt Zukunfts-Stichtage ab (Ist-Auswertung, keine Prognose) und schreibt dabei nichts
 # ---------------------------------------------------------------------------------------------------------------------------------
-def test_dunning_prepare_future_as_of_is_422_and_writes_nothing(world, auth_client):
-    r = auth_client.post(V + "/dunning/prepare", json={"as_of": iso(1)})
-    assert r.status_code == 422, r.text
-    assert r.json()["detail"]["code"] == "as_of_in_future"
-    assert auth_client.get(V + "/dunning/notices").json()["items"] == []
+def _snapshot(db):
+    """Inhaltsvergleich (nicht nur Zeilenzahl) aller beteiligten Tabellen."""
+    from sqlalchemy import select
+    from leventum.models import AuditEvent, Charge, DunningLine, DunningNotice, Payment, PaymentAllocation
+    db.expire_all()
+    out = {}
+    for m in (DunningNotice, DunningLine, AuditEvent, Charge, Payment, PaymentAllocation):
+        rows = db.scalars(select(m).order_by(m.id)).all()
+        out[m.__name__] = [{c.key: getattr(r, c.key) for c in m.__mapper__.column_attrs} for r in rows]
+    return out
 
 
-def test_dunning_prepare_today_and_past_still_allowed(world, auth_client):
-    assert auth_client.post(V + "/dunning/prepare", json={"as_of": iso(0)}).status_code == 200
-    assert auth_client.post(V + "/dunning/prepare", json={"as_of": iso(-30)}).status_code == 200
+def _overdue_world(fin):
+    """Zwei tatsächlich überfällige Untermiet-Forderungen (fällig 2027-05-01 und 2027-04-01) relativ zum eingefrorenen Heute 2027-06-01."""
+    a = fin.charge("600.00", date(2027, 5, 1))
+    b = fin.charge("300.00", date(2027, 4, 1))
+    put(fin)
+    return a, b
+
+
+def test_dunning_prepare_future_as_of_is_422_and_writes_nothing(fin, auth_client, frozen):
+    """M2 (wirksam): Kontrolle belegt vorab, dass es Kandidaten gibt und /prepare dort Entwürfe ERZEUGEN würde (-> ohne Fix wäre der Zukunftsaufruf 200
+    mit Entwürfen und die Zustandsgleichheit unten rot). Danach: Zukunft -> 422, Zustand byte-gleich; Kontrolle mit heutigem Datum erzeugt Entwürfe."""
+    a, b = _overdue_world(fin)
+    items = get_ok(auth_client, "/dunning/overdue", as_of=FROZEN.isoformat())["items"]
+    assert {i["charge_id"] for i in items} == {a.id, b.id}  # Kandidaten existieren wirklich
+    before = _snapshot(fin.w.db)
+    assert before["DunningNotice"] == [] and len(before["Charge"]) == 2 and before["AuditEvent"]  # Ausgangszustand: keine Entwürfe
+    for raw in (FROZEN + timedelta(days=1), date(2999, 1, 1)):
+        r = auth_client.post(V + "/dunning/prepare", json={"as_of": raw.isoformat()})
+        assert r.status_code == 422, r.text
+        assert code_of(r) == "as_of_in_future"
+        assert _snapshot(fin.w.db) == before
+        assert auth_client.get(V + "/dunning/notices").json()["items"] == []
+    # lease_id-Variante: dieselbe Ablehnung, kein Schreiben
+    r = auth_client.post(V + "/dunning/prepare", json={"as_of": (FROZEN + timedelta(days=1)).isoformat(), "lease_id": fin.lease.id})
+    assert r.status_code == 422 and code_of(r) == "as_of_in_future"
+    assert _snapshot(fin.w.db) == before
+    # Kontrolle: mit heutigem (eingefrorenem) Datum entstehen Entwürfe aus genau diesen Forderungen
+    r = auth_client.post(V + "/dunning/prepare", json={"as_of": FROZEN.isoformat()})
+    assert r.status_code == 200, r.text
+    created = r.json()["created"]
+    assert len(created) == 1
+    after = _snapshot(fin.w.db)
+    assert len(after["DunningNotice"]) == 1 and len(after["DunningLine"]) == 2
+    assert {ln["charge_id"] for ln in after["DunningLine"]} == {a.id, b.id}
+    assert len(after["AuditEvent"]) > len(before["AuditEvent"])
+    assert after["Charge"] == before["Charge"] and after["Payment"] == before["Payment"]  # Finanzdaten unverändert
+
+
+def test_dunning_prepare_control_past_date_creates_drafts_and_none_as_of_means_today(fin, auth_client, frozen):
+    """Kontrolle: Vergangenheit (Stichtag 2027-04-15: nur die Forderung vom 01.04. überfällig) erzeugt einen Entwurf mit genau dieser Zeile;
+    danach as_of weggelassen (= heute): nur die bisher nicht erfasste Forderung a (01.05.) bekommt einen Entwurf, b wird nicht dupliziert."""
+    a, b = _overdue_world(fin)
+    r = auth_client.post(V + "/dunning/prepare", json={"as_of": "2027-04-15"})
+    assert r.status_code == 200 and len(r.json()["created"]) == 1
+    n = r.json()["created"][0]
+    assert str(n["as_of_date"]) == "2027-04-15"
+    assert [ln["charge_id"] for ln in _snapshot(fin.w.db)["DunningLine"]] == [b.id]
+    r2 = auth_client.post(V + "/dunning/prepare", json={})
+    assert r2.status_code == 200 and len(r2.json()["created"]) == 1
+    lines = sorted((ln["charge_id"], ln["notice_id"]) for ln in _snapshot(fin.w.db)["DunningLine"])
+    assert sorted(cid for cid, _ in lines) == sorted([a.id, b.id])  # jede Forderung genau einmal (keine Duplikate)
+    assert str(r2.json()["created"][0]["as_of_date"]) == FROZEN.isoformat()
+
+
+def test_dunning_prepare_none_as_of_uses_frozen_today(fin, auth_client, frozen):
+    _overdue_world(fin)
+    r = auth_client.post(V + "/dunning/prepare", json={})
+    assert r.status_code == 200 and len(r.json()["created"]) == 1
+    assert str(r.json()["created"][0]["as_of_date"]) == FROZEN.isoformat()
+
+
+def test_dunning_prepare_invalid_as_of_format_is_pydantic_422_and_writes_nothing(fin, auth_client, frozen):
+    """Ungültiges Datum scheitert schon in der Pydantic-Validierung (DunningPrepareIn.as_of: date) -> 422 mit FastAPI-Standardliste in detail
+    (KEIN invalid_as_of-Code, der nur vom Service für Text-Stichtage kommt)."""
+    _overdue_world(fin)
+    before = _snapshot(fin.w.db)
+    for raw in ("2026-13-40", "morgen", "31.12.2026"):
+        r = auth_client.post(V + "/dunning/prepare", json={"as_of": raw})
+        assert r.status_code == 422, (raw, r.text)
+        detail = r.json()["detail"]
+        assert isinstance(detail, list) and detail  # Pydantic-Fehlerliste, kein ServiceError-Objekt
+        assert _snapshot(fin.w.db) == before
+
+
+def test_dunning_prepare_today_and_past_still_allowed(world, auth_client, frozen):
+    assert auth_client.post(V + "/dunning/prepare", json={"as_of": FROZEN.isoformat()}).status_code == 200
+    assert auth_client.post(V + "/dunning/prepare", json={"as_of": "2027-05-02"}).status_code == 200
+
+
+# ---------------------------------------------------------------------------------------------------------------------------------
+# candidates() separat abgesichert (Orchestrator-Änderung: Ist-Auswertung, Zukunft -> 422)
+# ---------------------------------------------------------------------------------------------------------------------------------
+def test_candidates_future_is_422_as_of_in_future(fin, frozen):
+    _overdue_world(fin)
+    for raw in (FROZEN + timedelta(days=1), date(2999, 1, 1)):
+        with pytest.raises(ServiceError) as ei:
+            DN.candidates(fin.w.db, raw)
+        assert ei.value.code == "as_of_in_future" and ei.value.status == 422
+
+
+def test_candidates_today_past_and_none(fin, frozen):
+    a, b = _overdue_world(fin)
+    db = fin.w.db
+    today_ids = {c["charge_id"] for c in DN.candidates(db, FROZEN)}
+    assert today_ids == {a.id, b.id}
+    assert {c["charge_id"] for c in DN.candidates(db, None)} == today_ids  # None = heute
+    assert {c["charge_id"] for c in DN.candidates(db)} == today_ids
+    # Vergangenheit: 2027-04-15 -> nur die Forderung vom 01.04. überfällig; 2027-04-01 -> keine (am Fälligkeitstag nicht überfällig)
+    assert {c["charge_id"] for c in DN.candidates(db, date(2027, 4, 15))} == {b.id}
+    assert DN.candidates(db, date(2027, 4, 1)) == []
+
+
+# ---------------------------------------------------------------------------------------------------------------------------------
+# A6c: Vertragsstatus „beendet“ im historischen Dashboard (dokumentierte Einschränkung) – Charakterisierung
+# ---------------------------------------------------------------------------------------------------------------------------------
+def _set_status(w, lease, status):
+    lease.status = status
+    w.db.commit()
+    w.db.expire_all()
+
+
+def test_a6c_ended_status_lease_missing_in_historical_dashboard_documented_limitation_not_target_behaviour(world, auth_client):
+    """A6c – DOKUMENTIERTE EINSCHRÄNKUNG, KEIN SOLLVERHALTEN (ADR 0002, DASHBOARD_LIMITATIONS; Review M5): Ein Untermietvertrag mit gespeichertem
+    Status "ended" und Enddatum NACH dem Stichtag wird im historischen Dashboard nicht gezählt, weil RUNNING_STATUS = (active, terminated).
+    Dieser Test hält das Ist-Verhalten fest; ändert sich die Einschränkung bewusst, muss er mit der Doku zusammen angepasst werden."""
+    lease = end_lease(world, d(-30), start=d(-200))   # Laufzeit -200..-30
+    world.db.commit()
+    as_of = iso(-100)                                  # Stichtag innerhalb der Laufzeit, vor dem Ende
+    assert val(auth_client, "active_subleases", as_of=as_of) == 1   # Vorher: Status active -> gezählt (Gegenprobe)
+    _set_status(world, lease, "ended")
+    assert val(auth_client, "active_subleases", as_of=as_of) == 0   # Ist-Verhalten A6c
+    assert val(auth_client, "active_tenants", as_of=as_of) == 0
+    lims = dash(auth_client, as_of=as_of)["stichtag"]["limitations"]
+    assert any("beendet" in x and "A6c" in x for x in lims)          # die Einschränkung ist dem Nutzer ausgewiesen
+
+
+def test_a6c_counter_case_past_end_date_with_active_status_counted_at_historical_as_of(world, auth_client):
+    """Gegenfall: Enddatum in der Vergangenheit, Status active -> am Stichtag innerhalb der Laufzeit gezählt; nach dem Ende nicht."""
+    end_lease(world, d(-30), start=d(-200))
+    world.db.commit()
+    assert val(auth_client, "active_subleases", as_of=iso(-100)) == 1
+    assert val(auth_client, "active_tenants", as_of=iso(-100)) == 1
+    assert val(auth_client, "active_subleases", as_of=iso(-29)) == 0   # nach Enddatum
+    assert val(auth_client, "active_subleases") == 0                   # heute
+
+
+def test_a6c_receivable_position_identical_for_active_and_ended_status(fin):
+    """A6c berührt die Forderungsrechnung nicht: receivable_position liefert für identische Forderungen/Zahlungen bei Status active und ended exakt dasselbe."""
+    a = fin.charge("600.00", d(-50))
+    fin.charge("300.00", d(-20))
+    fin.charge("100.00", d(10))
+    fin.pay("200.00", d(-30), (a, "200.00"))
+    put(fin)
+    stichtage = (d(-60), d(-45), d(-25), d(-5), TODAY)
+    active = [C.receivable_position(fin.w.db, s) for s in stichtage]
+    assert active[-1]["open_total"] == D("800.00") and active[-1]["overdue_count"] == 2   # Handrechnung heute: 400 + 300 + 100
+    _set_status(fin.w, fin.lease, "ended")
+    ended = [C.receivable_position(fin.w.db, s) for s in stichtage]
+    assert ended == active

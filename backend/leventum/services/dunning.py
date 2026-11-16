@@ -31,8 +31,8 @@ def _levels(db: Session, charge_id: int):
 
 
 def candidates(db: Session, as_of: date | None = None, grace_days: int = 0, lease_id: int | None = None) -> list[dict]:
-    """Überfällige Forderungen (Teilzahlungen berücksichtigt) mit der als Nächstes fälligen Mahnstufe."""
-    as_of = as_of or date.today()
+    """Überfällige Forderungen (Teilzahlungen berücksichtigt) mit der als Nächstes fälligen Mahnstufe. Ist-Auswertung: Zukunfts-Stichtag -> 422 as_of_in_future (Nachreview, wie prepare_notices)."""
+    as_of = stichtag.resolve(as_of).as_of
     stmt = select(Charge).where(Charge.direction == "receivable", Charge.voided_at.is_(None), Charge.due_date < as_of - timedelta(days=grace_days))
     if lease_id:
         stmt = stmt.where(Charge.lease_id == lease_id)

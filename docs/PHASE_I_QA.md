@@ -32,3 +32,18 @@ Independent-Reviewer (Lauf auf 5bc2f62..ca27c33, nur lesend über `ro_run.sh`) b
 
 ## 6. Windows/WebView2
 **Nicht getestet.** Vorbereitet: `docs/WINDOWS_TESTPLAN.md`, `docs/WINDOWS_BUILD_PLAN.md`, `scripts/windows_smoke_test.ps1` (nie ausgeführt, Syntax ungeprüft). Windows-Agent-Befunde R1–R7 (u. a. `pip install .[desktop]` vermutlich nicht nutzbar, kein Backup vor Migration, Restore unter Datei-Sperren, keine Einzelinstanz-Sperre) offen. Weiterhin Release-Blocker.
+
+## 7. Nachhärtung nach Nachreview – Testzahlen (getrennt nach selbst ausgeführt / übersprungen / nur dokumentiert)
+**Selbst ausgeführt (Orchestrator, Linux, root, Stand Arbeitsbaum nach Nachhärtung, vor Commit):**
+| Lauf | Ergebnis |
+|---|---|
+| Backend gesamt `cd backend && python -m pytest -q -rs` (465 s) | **957 bestanden, 0 fehlgeschlagen, 0 übersprungen, 3 xfailed** (zweiter Gesamtlauf nach den Review-Folgemaßnahmen; erster Lauf vorher: 951) |
+| Frontend `npm test` | 33 bestanden |
+| `npm run build` | erfolgreich |
+| Browser-E2E | 22/22 |
+| `python scripts/validate_agent_system.py` | „OK – keine Fehler“ |
+| Runner im echten isolierten Runner (`scripts/ro_run.sh`, als root) | in `test_agent_guard.py` (als root **außerhalb** des Runners ausgeführt: 0 übersprungen; der Reviewer konnte das im Runner als Nicht-root nicht reproduzieren: dort 36 übersprungen – Selbstauskunft des Orchestrators/QA-Agenten, nicht unabhängig bestätigt); zusätzlich manuell: uid 65534, Caps 0, NoNewPrivs 1, Repo read-only, `gh` nicht angemeldet |
+**Von Agenten gemeldet (Teilläufe, Selbstauskunft, nicht erneut einzeln vom Orchestrator wiederholt, aber im Gesamtlauf enthalten):** `test_file_set_guard.py` 35; `test_file_set_guard.py`+`test_i5_finance_leaks.py` 195; `test_i3_stichtag_kpis.py`+`test_d_dunning.py` 158; `test_agent_guard.py` 99.
+**Übersprungen:** keine im Gesamtlauf. Nicht ausgeführt: der Test „unlesbare Datei → Exit 2“ in `test_file_set_guard.py` läuft nur ohne root (Zweig als root nicht geprüft); der Abbruchzweig „oberster Mount bleibt rw → Exit 3“ in `ro_run.sh` ist nur per Code-Lektüre geprüft.
+**xfailed (separat, nicht als bestanden gezählt):** unverändert F1, A6a, A6b (`test_k2_dashboard_kpis.py`).
+**Nur dokumentiert / nicht belegt:** Windows/WebView2; Mutationsnachweis der neuen Tests nur gedanklich, nicht real mutiert.

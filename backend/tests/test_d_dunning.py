@@ -141,11 +141,32 @@ def test_partial_payment_changes_only_remaining_amount_in_next_draft(w):
     assert line.open_amount == D("150.00") and n.total_open == D("1740.00")
 
 
-def test_regression_approved_but_unsent_notice_never_escalates(w):
-    """Befund aus der Master-Review: Eine nur freigegebene Stufe-1-Erinnerung führte nach 7 Tagen zu einem Stufe-2-Entwurf."""
+FROZEN_TODAY = date(2027, 6, 1)
+
+
+class _FrozenMeta(type):
+    def __instancecheck__(cls, obj):  # echte date-Objekte bleiben date (stichtag.resolve prüft isinstance(raw, date))
+        return isinstance(obj, date)
+
+
+class _FrozenDate(date, metaclass=_FrozenMeta):
+    @classmethod
+    def today(cls):
+        return FROZEN_TODAY
+
+    @classmethod
+    def fromisoformat(cls, text):
+        return date.fromisoformat(text)
+
+
+def test_regression_approved_but_unsent_notice_never_escalates(w, monkeypatch):
+    """Befund aus der Master-Review: Eine nur freigegebene Stufe-1-Erinnerung führte nach 7 Tagen zu einem Stufe-2-Entwurf.
+    'Heute' ist per monkeypatch auf 2027-06-01 fixiert (deterministisch; Zukunftsstichtage werden mit 422 abgelehnt), das letzte Datum liegt ~16 Monate nach der Mahnung."""
+    from leventum.services import stichtag as ST
+    monkeypatch.setattr(ST, "date", _FrozenDate)
     n = fix(DN.prepare_notices(w.db, None, as_of=date(2026, 2, 10))[0])
     DN.approve(w.db, None, n.id)
-    for later in (date(2026, 2, 20), date(2026, 3, 30), date.today()):
+    for later in (date(2026, 2, 20), date(2026, 3, 30), FROZEN_TODAY):
         assert {(c["state"], c["proposed_level"]) for c in DN.candidates(w.db, later)} == {("approved_not_sent", 1)}
         assert DN.prepare_notices(w.db, None, as_of=later) == []
     DN.mark_sent(w.db, None, n.id, sent_on=date(2026, 2, 11), via="Brief")

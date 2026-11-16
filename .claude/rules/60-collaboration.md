@@ -19,7 +19,7 @@ Die **Hauptsitzung** ist der Orchestrator (`lead-architect`). Fachagenten sind S
 | Kritisch (Finanzlogik, Datenmodell, Sicherheit, Release) | zusätzlich Orchestrator |
 Prüfer arbeiten **nur lesend** (Befunde melden); Korrekturen führt der Autor/Besitzer aus. Technisch erzwungen (nicht nur angewiesen):
 - `security-privacy-engineer`: Werkzeuge nur `Read, Grep, Glob` (kein Bash, kein Edit/Write); Testausgaben/Diffs bekommt er als Nachweisdateien vom Orchestrator.
-- `independent-reviewer` (QA-/Fach-/DB-Prüfung): kein Edit/Write; Bash nur über `scripts/ro_run.sh` (Read-only-Mounts, unprivilegierter Benutzer, kein Netz), durchgesetzt per PreToolUse-Hook `.claude/hooks/ro_guard.py`. Der Hook wirkt nur in einem **vertrauten Workspace**; ohne Trust sind Bash-Aufrufe in diesem Profil gesperrt (fail closed), aber nicht über den Hook geprüft.
+- `independent-reviewer` (QA-/Fach-/DB-Prüfung): kein Edit/Write; MCP-Werkzeuge per Hook gesperrt; Bash nur über `scripts/ro_run.sh` (Read-only-Mounts, `env -i`-Allowlist, unprivilegierter Benutzer, kein Netz), durchgesetzt per PreToolUse-Hook `.claude/hooks/ro_guard.py`. Der Hook wirkt nur in einem **vertrauten Workspace**; ohne Trust sind Bash-Aufrufe in diesem Profil gesperrt (fail closed), aber nicht über den Hook geprüft.
 - Alle Nicht-Orchestratoren: `disallowedTools: Agent` (keine Verschachtelung). Skills stehen im Frontmatter (`skills:`) und werden vorgeladen.
 - Dateimengen: Claude Code hat keine Schreibsperre; Einhaltung wird nachträglich mit `scripts/check_file_set.py` (snapshot/check/overlap) geprüft. Konflikte zwischen Agenten entscheidet der Orchestrator; bei fachlich/rechtlich offenen Fragen entscheidet der Mensch.
 

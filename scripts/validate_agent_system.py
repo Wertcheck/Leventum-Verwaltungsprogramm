@@ -91,6 +91,8 @@ def check_agents() -> dict[str, dict]:
             hooks = json.dumps(fm.get("hooks", {}))
             if "Bash" in tools and "ro_guard.py" not in hooks:
                 err(f"{rel}: Bash nur zusammen mit dem ro_guard-Hook erlaubt")
+            if "ro_guard.py" in hooks and "mcp__" not in hooks:
+                err(f"{rel}: Hook-Matcher muss mcp__.* abdecken (MCP-Werkzeuge sperren)")
             if "Bash" in tools and "|| exit 2" not in hooks:
                 err(f"{rel}: Hook-Befehl muss mit '|| exit 2' enden – sonst blockiert ein fehlendes python3 (Exit 127) NICHT (Review-Befund H1)")
         if "Bash" in tools and f.stem == "documentation-engineer":

@@ -391,7 +391,10 @@ def cancel_lease(db: Session, actor_id: int | None, lease_id: int, reason: str) 
 
 
 def close_expired(db: Session, actor_id: int | None, today: date) -> int:
-    """Setzt laufende Verträge mit abgelaufenem Ende auf 'ended'. Wird vom Aufrufer (App-Start) ausgelöst."""
+    """Setzt laufende Verträge (domain.RUNNING_STATUS) mit abgelaufenem effektivem Ende (< today) auf 'ended', mit Audit-Eintrag je Vertrag; gibt die Anzahl zurück.
+
+    Wird derzeit von KEINEM Code im Repo aufgerufen (weder Produktivcode noch Tests; Eigentümerentscheidung F-3 offen, siehe docs/PHASE_I_SECURITY.md). Folge: Verträge
+    mit abgelaufenem Enddatum behalten den gespeicherten Status 'active'; die abgeleitete Phase (leases.phase) berücksichtigt das Datum unabhängig davon."""
     n = 0
     for lease in db.scalars(select(Lease).where(Lease.status.in_(domain.RUNNING_STATUS))):
         e = effective_end(lease)

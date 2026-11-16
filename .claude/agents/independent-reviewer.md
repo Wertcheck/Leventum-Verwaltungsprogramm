@@ -10,7 +10,7 @@ skills:
   - financial-calculations
 hooks:
   PreToolUse:
-    - matcher: "Bash|Edit|Write|NotebookEdit"
+    - matcher: "Bash|Edit|Write|NotebookEdit|mcp__.*"
       hooks:
         - type: command
           command: "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/ro_guard.py\" || exit 2"

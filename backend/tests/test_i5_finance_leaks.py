@@ -58,6 +58,16 @@ def leaks(text):
     return [m for m in MARKERS if m in text or (m == IBAN and m in flat)]
 
 
+# Eigenständiger Betrag 476 (z. B. "476.00", "476,00 €", "€476", JSON-Wert 476). Nachbarn: keine Ziffer/Punkt/Komma davor, kein Buchstabe/Unterstrich davor
+# (x476y, a476 = Teil eines Tokens/Hashs), außer nach JSON-Escape \n/\r/\t; danach keine Ziffer und kein Buchstabe (außer Währung "EUR": 476EUR).
+# Bewusst NICHT erkannt: Centwerte (47600), gespreizte Ziffern ("4 76"); bewusst weiter erkannt (konservativ): 476-1, 476.000.
+AMOUNT_476 = re.compile(r"(?:(?<![\w.,])|(?<=\\[nrt]))476(?:[.,]\d{1,2})?(?!\d)(?!(?!EUR)[^\W\d])")
+
+
+def has_standalone_476(text):
+    return bool(AMOUNT_476.search(text))
+
+
 def has_amount(text):
     return bool(AMOUNT.search(text)) or "€" in text
 
@@ -265,7 +275,7 @@ def test_b2_repair_events_and_history_carry_no_invoice_amount_without_finance_re
     assert leaks(hist.text) == []
     for path in (f"/history?entity_type=party&entity_id={scene['tenant']}", f"/tenants/{scene['tenant']}/overview"):
         r = c.get(V + path)
-        assert r.status_code == 200 and leaks(r.text) == [] and not re.search(r"(?<![\d.,])476(?:[.,]\d{1,2})?(?![\d])", r.text), path  # als eigenständiger Betrag, nicht als Teil von IDs/Zeitstempeln (Review M3)
+        assert r.status_code == 200 and leaks(r.text) == [] and not has_standalone_476(r.text), path  # als eigenständiger Betrag, nicht als Teil von IDs/Zeitstempeln (Review M3)
 
 
 @pytest.mark.parametrize("role", NO_FIN_ROLES)
@@ -704,3 +714,15 @@ def test_h_head_requests_reveal_nothing(scene, role, path):
     if r.status_code == 200:
         assert r.content == b"", "HEAD mit 200 darf keinen Body liefern"
     assert leaks(r.text) == [] and "kpis" not in r.text and "payment_status" not in r.text and "overdue_amount" not in r.text
+
+
+@pytest.mark.parametrize("text,expected", [
+    ('{"amount": "476.00"}', True), ('{"amount":476}', True), ("Rechnung 476,00 €", True), ("€476", True), ("-476,00", True), ("Summe: 476.", True),
+    ("476", True), ("476EUR", True), ("476 EUR", True), ('"RE\\n476,00"', True), ("(476,5)", True), ("1 x 476,00", True),
+    ("476-1", True), ("476.000", True),                    # konservativ weiter erkannt
+    ("x476y", False), ("a476", False), ("476a", False), ("abc476def", False), ("_476_", False),    # Teil eines Tokens (verbessert gegenüber alter Regex)
+    ("1476", False), ("4760", False), ("1.476,00", False), ("2026.476", False), ("47612", False),
+    ("47600", False), ("4 76", False),                      # Centwerte/gespreizt: bewusst nicht erkannt
+])
+def test_standalone_476_regex(text, expected):
+    assert has_standalone_476(text) is expected, text

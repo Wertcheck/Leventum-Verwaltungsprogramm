@@ -62,6 +62,8 @@ def main() -> int:
     tool = data.get("tool_name")
     if tool in WRITE_TOOLS:
         return deny(f"Schreibwerkzeug {tool} ist für Prüf-Agenten gesperrt")
+    if isinstance(tool, str) and tool.startswith("mcp__"):  # MCP-Werkzeuge (z. B. GitHub-Schreibzugriffe) sind für Prüf-Agenten nie zulässig (Nachreview; Matcher im Frontmatter deckt mcp__.* ab)
+        return deny(f"MCP-Werkzeug {tool} ist für Prüf-Agenten gesperrt")
     if tool != "Bash":
         return 0
     cmd = (data.get("tool_input") or {}).get("command", "")
