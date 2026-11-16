@@ -47,3 +47,15 @@ Independent-Reviewer (Lauf auf 5bc2f62..ca27c33, nur lesend über `ro_run.sh`) b
 **Übersprungen:** keine im Gesamtlauf. Nicht ausgeführt: der Test „unlesbare Datei → Exit 2“ in `test_file_set_guard.py` läuft nur ohne root (Zweig als root nicht geprüft); der Abbruchzweig „oberster Mount bleibt rw → Exit 3“ in `ro_run.sh` ist nur per Code-Lektüre geprüft.
 **xfailed (separat, nicht als bestanden gezählt):** unverändert F1, A6a, A6b (`test_k2_dashboard_kpis.py`).
 **Nur dokumentiert / nicht belegt:** Windows/WebView2; Mutationsnachweis der neuen Tests nur gedanklich, nicht real mutiert.
+
+## 8. P0/P1-Remediation – Testergebnisse (Linux, root; vor Commit; getrennt nach selbst ausgeführt / von Agenten gemeldet / nicht ausgeführt)
+**Vom Orchestrator selbst ausgeführt:**
+| Lauf | Ergebnis |
+|---|---|
+| `cd backend && python -m pytest -q -rs` (gesamt; letzter Lauf auf dem endgültigen Stand vor dem Commit, 527 s; frühere Läufe 1456) | **1466 bestanden, 0 fehlgeschlagen, 0 übersprungen, 3 xfailed** (F1, A6a, A6b unverändert) |
+| `npm test` (Frontend) | 33 bestanden (Frontend unverändert seit dem letzten Lauf) |
+| `python scripts/validate_agent_system.py` | OK – keine Fehler (11 Agenten, 20 Skills, 7 Regeln) |
+| Hook-FIFO-Mutationsprobe (Kopie ohne `O_NONBLOCK`) | hängt → Timeout (rc 124); aktueller Hook rc 0 |
+| `review_preflight.py check` gegen das echte Repo (vor Nachhärtung) | BLOCKED, erwartet: Änderungen ungepinnt/ungecommittet, kein Trust-Eintrag (`f-trust`) |
+**Von Agenten gemeldet (im Gesamtlauf enthalten, Selbstauskunft):** `test_agent_guard.py` 369 · `test_file_set_guard.py` 126 · `test_review_preflight.py` 144. **Nicht erneut ausgeführt:** Browser-E2E und Build (keine Frontend-Änderung), Mutationsproben der meisten neuen Tests (nur FIFO belegt), Windows.
+**Experimente im echten Claude-Code-Ablauf (`claude -p` 2.1.325, Linux):** Nonce-Protokoll im Subagent-Betrieb: vertraut → Hook feuert, `verify` Exit 0, Canary blockiert (2/2); unvertraut → Hook inaktiv, Canary ausgeführt, `verify` Exit 1 (2/2). Statisches Profil (Haupt-Prozess): `init`-Liste `Read, Grep, Glob`, Dummy-MCP verbunden aber nicht angeboten, keine Datei verändert (4 Läufe); als Subagent nur Selbstauskunft. Standard-Permission-Modus, Bash-fähiger Reviewer: vertraut wie oben; unvertraut → direkter `echo` läuft, Runner-Aufruf „requires approval“. Roh-Streams: `scratchpad/probe2`, `scratchpad/probe3` (ohne Konfig-Kopien).

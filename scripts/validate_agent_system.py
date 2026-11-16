@@ -85,6 +85,11 @@ def check_agents() -> dict[str, dict]:
                 err(f"{rel}: Sicherheitsprüfer darf NUR Read, Grep, Glob haben (kein Bash/Edit/Write), ist: {sorted(tools)}")
             if not {"Bash", "Edit", "Write", "NotebookEdit"} <= denied:
                 err(f"{rel}: disallowedTools muss Bash, Edit, Write, NotebookEdit enthalten")
+        if f.stem == "independent-reviewer-static":
+            if tools != {"Read", "Grep", "Glob"}:
+                err(f"{rel}: statischer Reviewer darf NUR Read, Grep, Glob haben (kein Bash/Edit/Write), ist: {sorted(tools)}")
+            if not {"Bash", "Edit", "Write", "NotebookEdit", "Agent"} <= denied:
+                err(f"{rel}: disallowedTools muss Bash, Edit, Write, NotebookEdit, Agent enthalten")
         if f.stem == "independent-reviewer":
             if tools & {"Edit", "Write", "NotebookEdit"} or not {"Edit", "Write", "NotebookEdit", "Agent"} <= denied:
                 err(f"{rel}: Reviewer darf keine Schreibwerkzeuge haben (tools/disallowedTools prüfen)")
@@ -93,6 +98,8 @@ def check_agents() -> dict[str, dict]:
                 err(f"{rel}: Bash nur zusammen mit dem ro_guard-Hook erlaubt")
             if "ro_guard.py" in hooks and "mcp__" not in hooks:
                 err(f"{rel}: Hook-Matcher muss mcp__.* abdecken (MCP-Werkzeuge sperren)")
+            if "ro_guard.py" in hooks and "python3 -I" not in hooks:
+                err(f"{rel}: Hook-Kommando muss `python3 -I` nutzen (isolierter Modus: keine Modul-Schatten aus .claude/hooks, keine PYTHON*-Variablen)")
             if "Bash" in tools and "|| exit 2" not in hooks:
                 err(f"{rel}: Hook-Befehl muss mit '|| exit 2' enden – sonst blockiert ein fehlendes python3 (Exit 127) NICHT (Review-Befund H1)")
         if "Bash" in tools and f.stem == "documentation-engineer":
