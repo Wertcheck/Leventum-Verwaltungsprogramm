@@ -1,6 +1,6 @@
 ---
 name: security-review
-description: Sicherheitsprüfung von Änderungen: Authentifizierung, Autorisierung, Header, Upload, Audit, Secrets, Fehlermeldungen. Verwenden bei jeder sicherheitsrelevanten Änderung und vor Releases.
+description: "Sicherheitsprüfung von Änderungen: Authentifizierung, Autorisierung, Header, Upload, Audit, Secrets, Fehlermeldungen. Verwenden bei jeder sicherheitsrelevanten Änderung und vor Releases."
 ---
 
 # Skill: security-review

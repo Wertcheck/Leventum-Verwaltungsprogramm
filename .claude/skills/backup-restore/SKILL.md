@@ -1,6 +1,6 @@
 ---
 name: backup-restore
-description: Backup/Restore inkl. Verschlüsselung und Restore-Drill. Verwenden bei Änderungen an `services/backup*.py`, Datenpfaden, Dokumentenspeicher, Migrationen und vor Releases.
+description: "Backup/Restore inkl. Verschlüsselung und Restore-Drill. Verwenden bei Änderungen an `services/backup*.py`, Datenpfaden, Dokumentenspeicher, Migrationen und vor Releases."
 ---
 
 # Skill: backup-restore

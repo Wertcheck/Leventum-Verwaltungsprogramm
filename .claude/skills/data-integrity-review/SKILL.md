@@ -1,6 +1,6 @@
 ---
 name: data-integrity-review
-description: Datenintegritätsprüfung: Waisen, Duplikate, Überlappungen, Überbelegung, Summenproben, Unveränderlichkeit. Verwenden nach Migrationen, Importen und größeren Änderungen an Verträgen/Finanzen.
+description: "Datenintegritätsprüfung: Waisen, Duplikate, Überlappungen, Überbelegung, Summenproben, Unveränderlichkeit. Verwenden nach Migrationen, Importen und größeren Änderungen an Verträgen/Finanzen."
 ---
 
 # Skill: data-integrity-review

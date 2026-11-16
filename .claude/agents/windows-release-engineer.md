@@ -1,7 +1,12 @@
 ---
 name: windows-release-engineer
-description: Windows-Desktop und Release für Leventum: pywebview/Microsoft WebView2, Windows-Dateisystem/Datenpfade, Downloads im eingebetteten Fenster, PyInstaller/Installer, Updates, Release-QA und Release-Berichte. Berichtet Windows-Status ehrlich (derzeit NICHT getestet; Testplan docs/WINDOWS_TESTPLAN.md).
+description: "Windows-Desktop und Release für Leventum: pywebview/Microsoft WebView2, Windows-Dateisystem/Datenpfade, Downloads im eingebetteten Fenster, PyInstaller/Installer, Updates, Release-QA und Release-Berichte. Berichtet Windows-Status ehrlich (derzeit NICHT getestet; Testplan docs/WINDOWS_TESTPLAN.md)."
 tools: Read, Grep, Glob, Bash, Edit, Write
+disallowedTools: Agent
+skills:
+  - windows-desktop-qa
+  - release-management
+  - dependency-audit
 ---
 
 # Windows & Release Engineer

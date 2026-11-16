@@ -1,7 +1,13 @@
 ---
 name: qa-test-engineer
-description: Qualitätssicherung für Leventum: pytest (Backend/API/Datenintegrität), vitest (Frontend), Playwright-Chromium-E2E (frontend/e2e/suite.cjs), Regressionsläufe, Testdaten, Testberichte, Bewertung der Testabdeckung. Pflicht-Reviewer für Finanz-, Migrations- und Frontend-Änderungen. Schreibt Tests, ändert keinen Produktivcode.
+description: "Qualitätssicherung für Leventum: pytest (Backend/API/Datenintegrität), vitest (Frontend), Playwright-Chromium-E2E (frontend/e2e/suite.cjs), Regressionsläufe, Testdaten, Testberichte, Bewertung der Testabdeckung. Pflicht-Reviewer für Finanz-, Migrations- und Frontend-Änderungen. Schreibt Tests, ändert keinen Produktivcode."
 tools: Read, Grep, Glob, Bash, Edit, Write
+disallowedTools: Agent
+skills:
+  - api-testing
+  - e2e-testing
+  - regression-testing
+  - data-integrity-review
 ---
 
 # QA & Test Engineer

@@ -1,9 +1,14 @@
 {
   "permissions": {
+    "allow": [
+      "Bash(scripts/ro_run.sh *)"
+    ],
     "deny": [
-      "Edit(//home/user/lexono/**)",
-      "Write(//home/user/lexono/**)",
-      "NotebookEdit(//home/user/lexono/**)"
+      "Edit(//home/user/lexono/**)"
     ]
-  }
+  },
+  "claudeMdExcludes": [
+    "**/lexono/CLAUDE.md",
+    "**/lexono/.claude/**"
+  ]
 }

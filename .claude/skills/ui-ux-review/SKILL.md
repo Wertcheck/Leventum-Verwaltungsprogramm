@@ -1,6 +1,6 @@
 ---
 name: ui-ux-review
-description: UX-/UI-Review gegen Leventum-Standards: Responsivität, Klarheit der Zahlen, Dialoge, Zustände, Accessibility. Verwenden als unabhängiger Review frontendseitiger Änderungen.
+description: "UX-/UI-Review gegen Leventum-Standards: Responsivität, Klarheit der Zahlen, Dialoge, Zustände, Accessibility. Verwenden als unabhängiger Review frontendseitiger Änderungen."
 ---
 
 # Skill: ui-ux-review

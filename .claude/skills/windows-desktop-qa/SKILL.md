@@ -1,6 +1,6 @@
 ---
 name: windows-desktop-qa
-description: Windows-Desktop-Prüfung (pywebview/WebView2, Dateisystem, Downloads, DPI). Verwenden bei Änderungen an `desktop.py`, Datenpfaden, Downloads, und für jeden Windows-Statusbericht.
+description: "Windows-Desktop-Prüfung (pywebview/WebView2, Dateisystem, Downloads, DPI). Verwenden bei Änderungen an `desktop.py`, Datenpfaden, Downloads, und für jeden Windows-Statusbericht."
 ---
 
 # Skill: windows-desktop-qa

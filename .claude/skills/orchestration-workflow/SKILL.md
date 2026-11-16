@@ -1,6 +1,6 @@
 ---
 name: orchestration-workflow
-description: Arbeitsablauf des Orchestrators: Aufgabenanalyse, Zerlegung in Pakete mit disjunkten Dateimengen, Delegation per Agent-Tool, Briefing, Gegenprüfung, Review-Matrix, Zusammenführung, Eskalation. Verwenden, sobald eine Aufgabe mehr als einen Fachbereich berührt oder Agenten delegiert werden.
+description: "Arbeitsablauf des Orchestrators: Aufgabenanalyse, Zerlegung in Pakete mit disjunkten Dateimengen, Delegation per Agent-Tool, Briefing, Gegenprüfung, Review-Matrix, Zusammenführung, Eskalation. Verwenden, sobald eine Aufgabe mehr als einen Fachbereich berührt oder Agenten delegiert werden."
 ---
 
 # Skill: orchestration-workflow

@@ -1,7 +1,11 @@
 ---
 name: documentation-engineer
-description: Technische Dokumentation für Leventum: Architekturentscheidungen (docs/decisions), API-Doku, Betriebs-/Sicherheitshandbücher, Änderungsprotokolle, Release- und Abschlussberichte. Dokumentiert nur Geprüftes, trennt Statusstufen, dupliziert nichts.
+description: "Technische Dokumentation für Leventum: Architekturentscheidungen (docs/decisions), API-Doku, Betriebs-/Sicherheitshandbücher, Änderungsprotokolle, Release- und Abschlussberichte. Dokumentiert nur Geprüftes, trennt Statusstufen, dupliziert nichts."
 tools: Read, Grep, Glob, Edit, Write
+disallowedTools: Agent
+skills:
+  - technical-documentation
+  - architecture-review
 ---
 
 # Documentation Engineer

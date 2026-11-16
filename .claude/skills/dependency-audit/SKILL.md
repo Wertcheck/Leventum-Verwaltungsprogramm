@@ -1,6 +1,6 @@
 ---
 name: dependency-audit
-description: Abhängigkeitsprüfung (npm, Python) mit ehrlicher Berichterstattung. Verwenden vor Releases, bei neuen/aktualisierten Paketen.
+description: "Abhängigkeitsprüfung (npm, Python) mit ehrlicher Berichterstattung. Verwenden vor Releases, bei neuen/aktualisierten Paketen."
 ---
 
 # Skill: dependency-audit

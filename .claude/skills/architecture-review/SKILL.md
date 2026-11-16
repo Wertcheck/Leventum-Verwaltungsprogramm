@@ -1,6 +1,6 @@
 ---
 name: architecture-review
-description: Architekturprüfung für Leventum: Schichtung, Modulgrenzen, Abhängigkeiten, Datenfluss, Risiko einer Änderung bewerten und Entscheidungsvorlagen schreiben. Verwenden bei neuen Modulen, Schnittstellenänderungen, Datenmodell-/Sicherheits-/Release-Änderungen oder wenn eine Aufgabe mehrere Schichten berührt.
+description: "Architekturprüfung für Leventum: Schichtung, Modulgrenzen, Abhängigkeiten, Datenfluss, Risiko einer Änderung bewerten und Entscheidungsvorlagen schreiben. Verwenden bei neuen Modulen, Schnittstellenänderungen, Datenmodell-/Sicherheits-/Release-Änderungen oder wenn eine Aufgabe mehrere Schichten berührt."
 ---
 
 # Skill: architecture-review

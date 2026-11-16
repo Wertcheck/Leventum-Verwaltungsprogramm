@@ -1,6 +1,6 @@
 ---
 name: financial-calculations
-description: Prüfung und Umsetzung von Geldberechnungen: Beträge, Rundung, Tagesanteile, Perioden, Verteilung, offene Posten, Datenstand/Prognose. Verwenden bei jeder Änderung an Sollstellungen, Zahlungen, Betriebskosten, Wirtschaftlichkeit, Dashboard-Geldkennzahlen.
+description: "Prüfung und Umsetzung von Geldberechnungen: Beträge, Rundung, Tagesanteile, Perioden, Verteilung, offene Posten, Datenstand/Prognose. Verwenden bei jeder Änderung an Sollstellungen, Zahlungen, Betriebskosten, Wirtschaftlichkeit, Dashboard-Geldkennzahlen."
 ---
 
 # Skill: financial-calculations

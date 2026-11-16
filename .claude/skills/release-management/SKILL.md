@@ -1,6 +1,6 @@
 ---
 name: release-management
-description: Release-Vorbereitung und -Bericht: Versionsstand, Migrationen, Backup vor Update, Testnachweise, Einschränkungen. Verwenden vor jedem Release/Abschlussbericht.
+description: "Release-Vorbereitung und -Bericht: Versionsstand, Migrationen, Backup vor Update, Testnachweise, Einschränkungen. Verwenden vor jedem Release/Abschlussbericht."
 ---
 
 # Skill: release-management

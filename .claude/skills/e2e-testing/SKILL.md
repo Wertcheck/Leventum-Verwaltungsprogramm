@@ -1,6 +1,6 @@
 ---
 name: e2e-testing
-description: Browser-E2E mit Playwright/Chromium (`frontend/e2e/suite.cjs`): Abläufe, Selektoren, Server-Start, Fehlerdiagnose. Verwenden bei neuen Nutzerflüssen und Regressionen in der Oberfläche.
+description: "Browser-E2E mit Playwright/Chromium (`frontend/e2e/suite.cjs`): Abläufe, Selektoren, Server-Start, Fehlerdiagnose. Verwenden bei neuen Nutzerflüssen und Regressionen in der Oberfläche."
 ---
 
 # Skill: e2e-testing

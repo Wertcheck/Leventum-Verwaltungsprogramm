@@ -1,6 +1,6 @@
 ---
 name: technical-documentation
-description: Technische Dokumentation: ADRs, API-Doku, Berichte, Betriebs-/Sicherheitsdoku. Verwenden bei Entscheidungen, API-Änderungen, Phasenabschluss.
+description: "Technische Dokumentation: ADRs, API-Doku, Berichte, Betriebs-/Sicherheitsdoku. Verwenden bei Entscheidungen, API-Änderungen, Phasenabschluss."
 ---
 
 # Skill: technical-documentation

@@ -1,6 +1,6 @@
 ---
 name: database-migrations
-description: Alembic-Migrationen und Modelländerungen: Up/Down, Backfill, Constraints, Altdatentest. Verwenden bei jeder Schemaänderung.
+description: "Alembic-Migrationen und Modelländerungen: Up/Down, Backfill, Constraints, Altdatentest. Verwenden bei jeder Schemaänderung."
 ---
 
 # Skill: database-migrations

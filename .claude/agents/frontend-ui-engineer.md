@@ -1,7 +1,12 @@
 ---
 name: frontend-ui-engineer
-description: Frontend und UI/UX für Leventum: React, TypeScript, Vite, Komponenten, responsives Layout (1536×1024 bis 1024×768), Formulare, Tabellen, Dialoge (eigener DialogProvider, keine window.prompt/confirm/alert), Accessibility, einheitliche EUR/Datum-Formatierung. Nicht für Backend- oder Finanzlogik.
+description: "Frontend und UI/UX für Leventum: React, TypeScript, Vite, Komponenten, responsives Layout (1536×1024 bis 1024×768), Formulare, Tabellen, Dialoge (eigener DialogProvider, keine window.prompt/confirm/alert), Accessibility, einheitliche EUR/Datum-Formatierung. Nicht für Backend- oder Finanzlogik."
 tools: Read, Grep, Glob, Bash, Edit, Write
+disallowedTools: Agent
+skills:
+  - frontend-development
+  - ui-ux-review
+  - e2e-testing
 ---
 
 # Frontend & UI/UX Engineer

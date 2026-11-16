@@ -1,6 +1,6 @@
 ---
 name: regression-testing
-description: Regressionsabsicherung: volle Suiten, Baseline, Testisolation, Vorher/Nachher-Vergleich. Verwenden nach jeder relevanten Änderung und vor Abschluss.
+description: "Regressionsabsicherung: volle Suiten, Baseline, Testisolation, Vorher/Nachher-Vergleich. Verwenden nach jeder relevanten Änderung und vor Abschluss."
 ---
 
 # Skill: regression-testing

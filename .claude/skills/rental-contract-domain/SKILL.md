@@ -1,6 +1,6 @@
 ---
 name: rental-contract-domain
-description: Fachmodell Rent-to-Rent: Haupt-/Untermietverträge, Phasen, Raumhierarchie, Überlappungsregeln, Konditionsversionen, Kündigung, Vertragslaufzeit. Verwenden bei Änderungen an Verträgen, Vermietungseinheiten, Mieterlisten, Dashboard-Definitionen.
+description: "Fachmodell Rent-to-Rent: Haupt-/Untermietverträge, Phasen, Raumhierarchie, Überlappungsregeln, Konditionsversionen, Kündigung, Vertragslaufzeit. Verwenden bei Änderungen an Verträgen, Vermietungseinheiten, Mieterlisten, Dashboard-Definitionen."
 ---
 
 # Skill: rental-contract-domain

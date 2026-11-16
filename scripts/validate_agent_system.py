@@ -6,12 +6,19 @@ Aufruf: python scripts/validate_agent_system.py   (Exit-Code 0 = keine Fehler)
 """
 from __future__ import annotations
 
+import json
+import os
 import re
 import sys
 from pathlib import Path
 
+try:
+    import yaml
+except ImportError:  # ohne PyYAML kann das Frontmatter (Listen/Hooks) nicht geprüft werden – lieber abbrechen als still weniger prüfen
+    sys.exit("FEHLER: PyYAML fehlt (pip install pyyaml) – Validierung nicht möglich")
+
 ROOT = Path(__file__).resolve().parent.parent
-REQUIRED_AGENTS = ["lead-architect", "backend-engineer", "frontend-ui-engineer", "domain-finance-engineer", "security-privacy-engineer",
+REQUIRED_AGENTS = ["independent-reviewer", "lead-architect", "backend-engineer", "frontend-ui-engineer", "domain-finance-engineer", "security-privacy-engineer",
                    "qa-test-engineer", "database-architect", "windows-release-engineer", "documentation-engineer"]
 REQUIRED_SKILLS = ["architecture-review", "backend-development", "frontend-development", "ui-ux-review", "financial-calculations", "rental-contract-domain",
                    "operating-cost-accounting", "database-migrations", "data-integrity-review", "security-review", "privacy-review", "backup-restore",
@@ -36,10 +43,11 @@ def frontmatter(path: Path) -> tuple[dict[str, str], str]:
     if not m:
         err(f"{path.relative_to(ROOT)}: Frontmatter fehlt")
         return {}, text
-    fm = {}
-    for line in m.group(1).splitlines():
-        k, _, v = line.partition(":")
-        fm[k.strip()] = v.strip()
+    try:
+        fm = yaml.safe_load(m.group(1)) or {}
+    except yaml.YAMLError as e:
+        err(f"{path.relative_to(ROOT)}: Frontmatter ist kein gültiges YAML ({e})")
+        return {}, m.group(2)
     return fm, m.group(2)
 
 
@@ -58,17 +66,33 @@ def check_agents() -> dict[str, dict]:
             err(f"{rel}: name '{fm.get('name')}' ≠ Dateiname")
         if len(fm.get("description", "")) < 80:
             err(f"{rel}: description fehlt/zu kurz (Delegationsentscheidung hängt daran)")
-        tools = {t.strip() for t in fm.get("tools", "").split(",") if t.strip()}
+        tools = {t.strip() for t in str(fm.get("tools", "")).split(",") if t.strip()}
+        denied = {t.strip() for t in str(fm.get("disallowedTools", "")).split(",") if t.strip()}
         if not tools:
             err(f"{rel}: tools fehlen")
-        for t in tools - VALID_TOOLS:
+        for t in (tools | denied) - VALID_TOOLS:
             err(f"{rel}: unbekanntes Werkzeug {t}")
-        if f.stem == "lead-architect" and "Agent" not in tools:
-            err(f"{rel}: Orchestrator braucht das Agent-Werkzeug")
-        if f.stem != "lead-architect" and "Agent" in tools:
-            err(f"{rel}: nur der Orchestrator darf Agent-Werkzeug haben")
-        if f.stem == "security-privacy-engineer" and tools & {"Edit", "Write"}:
-            err(f"{rel}: Sicherheitsprüfer soll ohne Schreibwerkzeuge arbeiten")
+        if f.stem == "lead-architect":
+            if "Agent" not in tools:
+                err(f"{rel}: Orchestrator braucht das Agent-Werkzeug")
+        else:
+            if "Agent" in tools:
+                err(f"{rel}: nur der Orchestrator darf Agent in tools haben")
+            if "Agent" not in denied:
+                err(f"{rel}: disallowedTools muss Agent enthalten (Delegation nur durch den Orchestrator, Verschachtelung ausgeschlossen)")
+        if f.stem == "security-privacy-engineer":
+            if tools != {"Read", "Grep", "Glob"}:
+                err(f"{rel}: Sicherheitsprüfer darf NUR Read, Grep, Glob haben (kein Bash/Edit/Write), ist: {sorted(tools)}")
+            if not {"Bash", "Edit", "Write", "NotebookEdit"} <= denied:
+                err(f"{rel}: disallowedTools muss Bash, Edit, Write, NotebookEdit enthalten")
+        if f.stem == "independent-reviewer":
+            if tools & {"Edit", "Write", "NotebookEdit"} or not {"Edit", "Write", "NotebookEdit", "Agent"} <= denied:
+                err(f"{rel}: Reviewer darf keine Schreibwerkzeuge haben (tools/disallowedTools prüfen)")
+            hooks = json.dumps(fm.get("hooks", {}))
+            if "Bash" in tools and "ro_guard.py" not in hooks:
+                err(f"{rel}: Bash nur zusammen mit dem ro_guard-Hook erlaubt")
+        if "Bash" in tools and f.stem == "documentation-engineer":
+            err(f"{rel}: documentation-engineer braucht kein Bash")
         for sec in AGENT_SECTIONS:
             if not re.search(rf"^## {re.escape(sec)}", body, re.M):
                 err(f"{rel}: Abschnitt fehlt: {sec}")
@@ -78,6 +102,9 @@ def check_agents() -> dict[str, dict]:
         for s in skills:
             if not (ROOT / ".claude" / "skills" / s / "SKILL.md").exists():
                 err(f"{rel}: Skill existiert nicht: {s}")
+        fm_skills = fm.get("skills") or []
+        if sorted(fm_skills) != sorted(skills):
+            err(f"{rel}: Frontmatter-skills {sorted(fm_skills)} ≠ im Text referenzierte Skills {sorted(skills)} (Skills werden nur vorgeladen, wenn sie im Frontmatter stehen)")
         found[f.stem] = {"tools": tools, "skills": set(skills)}
     return found
 
@@ -153,10 +180,35 @@ def check_rules_and_misc() -> None:
             err(f"{f.relative_to(ROOT)}: mögliches Secret")
 
 
+def check_isolation() -> None:
+    """Lexono-Schutz, Read-only-Runner und Hook müssen vorhanden und konsistent sein."""
+    sp = ROOT / ".claude" / "settings.json"
+    try:
+        st = json.loads(sp.read_text(encoding="utf-8"))
+    except Exception as e:
+        err(f".claude/settings.json nicht lesbar ({e})")
+        return
+    deny = st.get("permissions", {}).get("deny", [])
+    if not any(d.startswith("Edit(") and "lexono" in d for d in deny):
+        err("settings.json: Edit-Deny-Regel für Lexono fehlt")
+    for d in deny:  # Claude Code wertet nur Edit(...) für Dateipfade aus; Write(...)/NotebookEdit(...) werden gemeldet und ignoriert
+        if d.startswith(("Write(", "NotebookEdit(")):
+            err(f"settings.json: Deny-Regel '{d}' wird von Claude Code nicht ausgewertet – Edit(...) verwenden")
+    if not any("lexono" in x for x in st.get("claudeMdExcludes", [])):
+        err("settings.json: claudeMdExcludes für Lexono fehlt (fremde Projektregeln dürfen nicht in den Kontext)")
+    for rel, need_exec in ((".claude/hooks/ro_guard.py", False), ("scripts/ro_run.sh", True)):
+        fp = ROOT / rel
+        if not fp.exists():
+            err(f"{rel} fehlt")
+        elif need_exec and not os.access(fp, os.X_OK):
+            err(f"{rel} ist nicht ausführbar")
+
+
 def main() -> int:
     agents = check_agents()
     check_skills(agents)
     check_rules_and_misc()
+    check_isolation()
     check_paths()
     print(f"Agenten: {len(agents)} · Skills: {len(list((ROOT / '.claude' / 'skills').iterdir()))} · Regeln: {len(list((ROOT / '.claude' / 'rules').glob('*.md')))}")
     for w in WARN:

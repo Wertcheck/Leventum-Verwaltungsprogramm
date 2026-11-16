@@ -1,6 +1,6 @@
 ---
 name: backend-development
-description: Backend-Entwicklung in Leventum (FastAPI, SQLAlchemy 2, Pydantic, Services). Verwenden für neue/geänderte Endpunkte, Services, Validierung und Fehlerbehandlung.
+description: "Backend-Entwicklung in Leventum (FastAPI, SQLAlchemy 2, Pydantic, Services). Verwenden für neue/geänderte Endpunkte, Services, Validierung und Fehlerbehandlung."
 ---
 
 # Skill: backend-development

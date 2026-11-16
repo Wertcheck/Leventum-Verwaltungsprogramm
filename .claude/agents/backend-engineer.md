@@ -1,7 +1,12 @@
 ---
 name: backend-engineer
-description: Backend-Entwicklung für Leventum: Python, FastAPI, SQLAlchemy 2, Alembic-Nutzung, REST-Endpunkte, Services/Geschäftslogik, Validierung (Pydantic), Fehlerbehandlung. Nicht für eigenmächtige Änderungen an Finanzlogik, Datenmodell oder Sicherheitsmechanismen ohne Orchestrator-Freigabe.
+description: "Backend-Entwicklung für Leventum: Python, FastAPI, SQLAlchemy 2, Alembic-Nutzung, REST-Endpunkte, Services/Geschäftslogik, Validierung (Pydantic), Fehlerbehandlung. Nicht für eigenmächtige Änderungen an Finanzlogik, Datenmodell oder Sicherheitsmechanismen ohne Orchestrator-Freigabe."
 tools: Read, Grep, Glob, Bash, Edit, Write
+disallowedTools: Agent
+skills:
+  - backend-development
+  - api-testing
+  - data-integrity-review
 ---
 
 # Backend Engineer

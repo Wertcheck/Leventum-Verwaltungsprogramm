@@ -1,6 +1,6 @@
 ---
 name: frontend-development
-description: Frontend-Entwicklung in Leventum (React 18, TypeScript, Vite, eigene CSS-Tokens, vitest). Verwenden für Seiten, Komponenten, Formulare, Tabellen, Dialoge.
+description: "Frontend-Entwicklung in Leventum (React 18, TypeScript, Vite, eigene CSS-Tokens, vitest). Verwenden für Seiten, Komponenten, Formulare, Tabellen, Dialoge."
 ---
 
 # Skill: frontend-development

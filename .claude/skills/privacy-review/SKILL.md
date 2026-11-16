@@ -1,6 +1,6 @@
 ---
 name: privacy-review
-description: Datenschutzprüfung: Datensparsamkeit, lokale Datenhaltung, Maskierung, Löschkonzept/Aufbewahrung, keine Übertragung. Verwenden bei neuen personenbezogenen Feldern, Exporten, Logs, Dokumenten und Tests mit Daten.
+description: "Datenschutzprüfung: Datensparsamkeit, lokale Datenhaltung, Maskierung, Löschkonzept/Aufbewahrung, keine Übertragung. Verwenden bei neuen personenbezogenen Feldern, Exporten, Logs, Dokumenten und Tests mit Daten."
 ---
 
 # Skill: privacy-review

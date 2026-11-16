@@ -1,6 +1,6 @@
 ---
 name: operating-cost-accounting
-description: Betriebskostenabrechnung Ebene A (Vermieter→Leventum) und Vergleich Ebene B (Untermieter): Positionen, Umlageschlüssel, Vorauszahlungen, Verteilung, Einfrieren, Nicht-Zuordenbares. Verwenden bei Änderungen an `utility.py` und der Betriebskosten-UI.
+description: "Betriebskostenabrechnung Ebene A (Vermieter→Leventum) und Vergleich Ebene B (Untermieter): Positionen, Umlageschlüssel, Vorauszahlungen, Verteilung, Einfrieren, Nicht-Zuordenbares. Verwenden bei Änderungen an `utility.py` und der Betriebskosten-UI."
 ---
 
 # Skill: operating-cost-accounting

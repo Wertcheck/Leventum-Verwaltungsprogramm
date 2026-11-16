@@ -1,6 +1,6 @@
 ---
 name: api-testing
-description: API-Tests mit pytest/TestClient: Erfolgs-, Fehler-, Rechte- und Idempotenzfälle. Verwenden bei jedem neuen/geänderten Endpunkt.
+description: "API-Tests mit pytest/TestClient: Erfolgs-, Fehler-, Rechte- und Idempotenzfälle. Verwenden bei jedem neuen/geänderten Endpunkt."
 ---
 
 # Skill: api-testing

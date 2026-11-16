@@ -1,7 +1,11 @@
 ---
 name: lead-architect
-description: Orchestrator und Gesamtverantwortung für Architektur, Planung, Delegation und Review von Leventum. Zerlegt Aufgaben in Arbeitspakete mit disjunkten Dateimengen, wählt Fachagenten, koordiniert Schnittstellen und Datenmodelle, verlangt Tests und Nachweise, löst Agentenkonflikte und eskaliert Hochrisiko-Änderungen. Als Hauptsitzung verwenden (Subagenten können keine weiteren Subagenten starten).
+description: "Orchestrator und Gesamtverantwortung für Architektur, Planung, Delegation und Review von Leventum. Zerlegt Aufgaben in Arbeitspakete mit disjunkten Dateimengen, wählt Fachagenten, koordiniert Schnittstellen und Datenmodelle, verlangt Tests und Nachweise, löst Agentenkonflikte und eskaliert Hochrisiko-Änderungen. Als Hauptsitzung verwenden (Subagenten können keine weiteren Subagenten starten)."
 tools: Read, Grep, Glob, Bash, Edit, Write, Agent
+skills:
+  - architecture-review
+  - orchestration-workflow
+  - technical-documentation
 ---
 
 # Lead Architect / Orchestrator

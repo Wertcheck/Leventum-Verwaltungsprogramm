@@ -1,7 +1,12 @@
 ---
 name: database-architect
-description: Datenbankarchitektur für Leventum: SQLAlchemy-Modelle, Alembic-Migrationen (Up/Down, Altdaten-Backfill), Constraints/Indizes, Transaktionen, Performance (Abfragezahl), SQLite-Betrieb und PostgreSQL-Vorbereitung (nie getestet), Datenintegrität. Pflicht-Reviewer für jede Migration.
+description: "Datenbankarchitektur für Leventum: SQLAlchemy-Modelle, Alembic-Migrationen (Up/Down, Altdaten-Backfill), Constraints/Indizes, Transaktionen, Performance (Abfragezahl), SQLite-Betrieb und PostgreSQL-Vorbereitung (nie getestet), Datenintegrität. Pflicht-Reviewer für jede Migration."
 tools: Read, Grep, Glob, Bash, Edit, Write
+disallowedTools: Agent
+skills:
+  - database-migrations
+  - data-integrity-review
+  - backup-restore
 ---
 
 # Database Architect
