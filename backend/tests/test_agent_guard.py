@@ -143,3 +143,25 @@ def test_runner_git_is_read_only():
 
 def test_runner_refuses_without_privileges_or_args():
     assert subprocess.run([str(RUNNER)], capture_output=True, cwd=ROOT).returncode == 2
+
+
+# ---- Review-Befund H1: fehlendes python3 darf den Hook nicht fail-open machen (nur Exit-Code 2 blockiert) -----------------------------------
+def _reviewer_hook_command():
+    import re
+    text = (ROOT / ".claude" / "agents" / "independent-reviewer.md").read_text(encoding="utf-8")
+    m = re.search(r'command: "(.*)"\n', text)
+    assert m, "Hook-Befehl im Frontmatter nicht gefunden"
+    return m.group(1).replace('\\"', '"').replace("$CLAUDE_PROJECT_DIR", str(ROOT))
+
+
+def test_reviewer_hook_command_blocks_when_python_is_missing():
+    cmd = _reviewer_hook_command()
+    assert cmd.rstrip().endswith("|| exit 2")
+    r = subprocess.run(["/bin/sh", "-c", cmd], input="{}", capture_output=True, text=True, env={"PATH": "/nonexistent"})
+    assert r.returncode == 2          # ohne '|| exit 2' wäre es 127 (= nicht blockierend)
+
+
+def test_reviewer_hook_command_allows_ro_run_and_blocks_other_commands():
+    cmd = _reviewer_hook_command()
+    run = lambda c: subprocess.run(["/bin/sh", "-c", cmd], input=json.dumps(bash(c)), capture_output=True, text=True, cwd=ROOT).returncode
+    assert run("scripts/ro_run.sh ls") == 0 and run("touch x") == 2

@@ -30,8 +30,23 @@ FINANCE_REMINDER_KEY_PREFIXES = frozenset({"overdue", "deposit", "utility_statem
 FINANCE_DOC_TYPES = frozenset({"rechnung", "betriebskostenabrechnung", "kaution"})
 
 # Wiederkehrende Audit-Ereignisse mit Finanzbezug (Historie/Mieterakte ohne finance:read).
-FINANCE_AUDIT_ENTITY_TYPES = frozenset({"deposit", "deposit_transaction", "dunning_notice", "invoice", "payment", "charge"})
-FINANCE_AUDIT_ACTION_PREFIXES = ("deposit.", "dunning.", "invoice.", "payment.", "charge.")
+FINANCE_AUDIT_ENTITY_TYPES = frozenset({"deposit", "deposit_transaction", "dunning_notice", "invoice", "payment", "charge", "bank_account", "bank_import",
+                                        "bank_transaction", "utility_statement"})
+FINANCE_AUDIT_ACTION_PREFIXES = ("deposit.", "dunning.", "invoice.", "payment.", "charge.", "bank.", "utility_statement.")
+# Einzelaktionen mit Finanzbezug ohne eigenes Präfix (Review Phase I): Umlageschlüssel-Zuordnung am Vertrag
+FINANCE_AUDIT_ACTIONS = frozenset({"lease.allocation_set"})
+# ALLOW-Liste (Klassifikationspflicht): ALLE übrigen im Code geschriebenen Audit-Aktionen, bewusst als NICHT finanziell eingestuft.
+# Jede neue Aktion in audit.record(...) muss in genau einer Gruppe stehen (Test test_i7_audit_action_classification), sonst schlägt der Test fehl.
+NON_FINANCE_AUDIT_ACTIONS = frozenset({
+    "auth.login", "auth.login_blocked", "auth.login_failed", "auth.logout", "backup.created", "backup.restore_started", "user.created",
+    "bed.created", "bed.updated", "room.created", "room.updated", "unit.created", "unit.updated", "property.created", "property.updated", "rentable_unit.created",
+    "communication.created", "handover.created", "party.created", "party.updated",
+    "document.deleted", "document.integrity_failed", "document.linked", "document.purged", "document.uploaded",  # Finanzdokumente werden zusätzlich über details.document_id gefiltert
+    "lease.activated", "lease.cancelled", "lease.created", "lease.ended", "lease.legal_review", "lease.note_added", "lease.terminated", "lease.updated",
+    "lease.term_added", "lease.utility_agreement_added",  # Vertragskonditionen = Stammdaten (Entscheidung, Eigentümerbestätigung offen); Summaries ohne Beträge
+    "repair.created", "repair.note", "repair.status", "repair.updated",
+    "task.created", "task.status", "task.updated",
+})
 # Reparaturverlauf: Ereignisarten, die Rechnungen/Beträge nennen (RepairEvent.kind bzw. Aktion repair.<kind>)
 FINANCE_REPAIR_EVENT_KINDS = frozenset({"invoice"})
 FINANCE_REPAIR_AUDIT_ACTIONS = frozenset({"repair.invoice", "repair.invoice_linked"})
@@ -70,4 +85,4 @@ def require_finance_doc_access(user: AppUser, doc_type: str | None) -> None:
 
 
 def is_finance_audit(action: str | None, entity_type: str | None) -> bool:
-    return (entity_type in FINANCE_AUDIT_ENTITY_TYPES) or bool(action and (action.startswith(FINANCE_AUDIT_ACTION_PREFIXES) or action in FINANCE_REPAIR_AUDIT_ACTIONS))
+    return (entity_type in FINANCE_AUDIT_ENTITY_TYPES) or bool(action and (action.startswith(FINANCE_AUDIT_ACTION_PREFIXES) or action in FINANCE_REPAIR_AUDIT_ACTIONS or action in FINANCE_AUDIT_ACTIONS))

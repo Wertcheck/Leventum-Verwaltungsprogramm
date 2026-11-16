@@ -13,7 +13,7 @@ hooks:
     - matcher: "Bash|Edit|Write|NotebookEdit"
       hooks:
         - type: command
-          command: "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/ro_guard.py\""
+          command: "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/ro_guard.py\" || exit 2"
 ---
 
 # Independent Reviewer (read-only)
