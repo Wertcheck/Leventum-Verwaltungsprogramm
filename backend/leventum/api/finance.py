@@ -175,6 +175,16 @@ def documents_list(entity_type: str, entity_id: int, db: Session = Depends(get_d
     return {"items": [doc_out(d) for d in DOC.for_entity(db, entity_type, entity_id)]}
 
 
+def _content_disposition(name: str) -> str:
+    """RFC 6266/5987: ASCII-Fallback (filename) plus UTF-8-Name (filename*). Header-Werte müssen Latin-1-kodierbar sein; Zeichen wie €, – oder
+    kyrillische Namen führten sonst zu einer Ausnahme (HTTP 500). Anführungszeichen, Steuerzeichen und Pfadtrenner werden entfernt (Header-Injection)."""
+    from urllib.parse import quote
+    import unicodedata
+    clean = "".join(c for c in name if c.isprintable() and c not in '"\\/\r\n') or "dokument"
+    ascii_name = unicodedata.normalize("NFKD", clean).encode("ascii", "ignore").decode("ascii").strip() or "dokument"
+    return f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(clean, safe='')}"
+
+
 @router.get("/documents/{did}/download", dependencies=[Depends(require("document:read"))])
 def documents_download(did: int, db: Session = Depends(get_db), settings: Settings = Depends(get_settings)):
     d = get_or_404(db, Document, did, "Dokument")
@@ -187,8 +197,7 @@ def documents_download(did: int, db: Session = Depends(get_db), settings: Settin
         audit.record(db, "document.integrity_failed", actor_user_id=None, entity_type="document", entity_id=d.id, summary=f"Dokument-Integrität verletzt: {res['problem']}", details={"problem": res["problem"]})
         db.commit()
         raise ServiceError("file_missing" if res["problem"] in ("missing", "unreadable") else "file_corrupt", res["message"], 404 if res["problem"] == "missing" else 409)
-    safe = d.original_name.replace('"', "")
-    return StreamingResponse(store.open(d.storage_key), media_type=d.mime, headers={"Content-Disposition": f'attachment; filename="{safe}"', "X-Content-Type-Options": "nosniff"})
+    return StreamingResponse(store.open(d.storage_key), media_type=d.mime, headers={"Content-Disposition": _content_disposition(d.original_name), "X-Content-Type-Options": "nosniff"})
 
 
 # --- Kautionen -----------------------------------------------------------------------------------------------------------------------
