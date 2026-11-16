@@ -61,3 +61,8 @@ In frischen Prozessen **nicht** reproduzierbar (4.5). In der Cloud-Sitzung wurde
 - Dateimengen-Regel bleibt Verfahren + Detektion; kein Schutz gegen gleichzeitige Schreibzugriffe.
 - `claudeMdExcludes` gegen `add_repo`-Anbindung: nicht verifiziert (5).
 - Alle Agentenaussagen in den Tests sind Selbstauskünfte; belegt durch Beobachtung des Hauptprozesses sind: Werkzeugablehnungen (Hook-/EROFS-Meldungen), fehlende Canary-Dateien, Git-/Lexono-Status.
+
+## 8. Nachtrag: Befunde des unabhängigen Reviews (Stand 052b758)
+- **H1 (hoch) – behoben, Automatisiert getestet:** `.claude/hooks/ro_guard.py` ließ `scripts/ro_run.sh echo a#b; touch /x` passieren, weil `shlex` ein `#` mitten im Wort als Kommentar verwirft, Bash aber nicht. Fix: `lex.commenters = ""` und `#` in `FORBIDDEN_CHARS`; 6 neue Tests in `backend/tests/test_agent_guard.py` (jetzt 61 bestanden). Der Hook bleibt ein **Backstop**, keine Sicherheitsgrenze; die Grenze ist `ro_run.sh`.
+- **M4 – behoben:** `scripts/ro_run.sh` remountet alle als `rw` eingehängten Mounts aus `/proc/self/mounts` read-only (außer `/proc`, `/sys`, `/dev/pts`, `/dev/mqueue`). Geprüft in dieser Linux-Umgebung: Repo, `/dev/shm`, `/run`, `/var/tmp` → „Read-only file system“, `/tmp` = privates tmpfs, uid 65534. `/sys/fs/cgroup` bleibt rw, ist ohne Capabilities für den Prozess nicht beschreibbar (nicht gesondert geprüft).
+- **N1/N2** (`check_file_set.py` erkennt committete Änderungen nicht, `*` matcht über `/`; Validator): **offen**, dokumentiert in Abschnitt 7.
