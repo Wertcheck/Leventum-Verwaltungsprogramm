@@ -1,5 +1,6 @@
 """Tests für die Agenten-Schreibsperre: Hook .claude/hooks/ro_guard.py (Befehlsfilter) und scripts/ro_run.sh (OS-Ebene, nur Linux mit root).
 Keine destruktiven Tests: Schreibversuche zielen auf ein Wegwerfverzeichnis unter tmp_path bzw. auf /tmp-Pfade, nie auf Repo oder Lexono."""
+import importlib.util
 import json
 import os
 import shutil
@@ -61,6 +62,12 @@ BLOCKED = [
     "scripts/ro_run.sh ls \\\n touch x",
     "(scripts/ro_run.sh ls)",
     "scripts/ro_run.sh ls 2>&1",
+    # Review-Befund H1: '#' mitten im Wort ist für shlex ein Kommentar, für Bash nicht – der Rest nach ';', '&&', '|' lief an der Isolation vorbei
+    "scripts/ro_run.sh echo a#b; touch /x",
+    "scripts/ro_run.sh echo a #b; touch /x",
+    "scripts/ro_run.sh echo a#b && touch /x",
+    "scripts/ro_run.sh echo a#b | tee /x",
+    "scripts/ro_run.sh ls # kommentar",
 ]
 
 
@@ -85,6 +92,16 @@ def test_hook_blocks_write_tools(tool):
 def test_hook_fails_closed_on_bad_input(payload):
     rc, _ = run_hook(payload)
     assert rc == 2   # Exit 1 würde NICHT blockieren – jede kaputte Eingabe muss mit 2 enden
+
+
+def test_shlex_comment_semantics_cannot_hide_operators():
+    """Der Hook darf nie wegen shlex-Kommentarregeln Tokens verlieren: direkte Prüfung der Funktion (ohne Subprozess)."""
+    spec = importlib.util.spec_from_file_location("ro_guard", HOOK)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    for cmd in ("scripts/ro_run.sh echo a#b; touch /x", "scripts/ro_run.sh echo a#b && touch /x", "scripts/ro_run.sh echo a #b | tee /x"):
+        assert mod.check_command(cmd, str(ROOT)) is not None, cmd
+    assert mod.check_command("scripts/ro_run.sh bash -c 'echo hallo'", str(ROOT)) is None
 
 
 def test_hook_ignores_read_tools():

@@ -15,7 +15,7 @@ import sys
 
 REPO = os.path.realpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 RUNNER = os.path.join(REPO, "scripts", "ro_run.sh")
-FORBIDDEN_CHARS = ("$", "`", "\n", "\r", "\\", "\x00")
+FORBIDDEN_CHARS = ("$", "`", "\n", "\r", "\\", "\x00", "#")
 WRITE_TOOLS = {"Edit", "Write", "NotebookEdit"}
 
 
@@ -33,6 +33,7 @@ def check_command(cmd: str, cwd: str | None = None) -> str | None:
     try:
         lex = shlex.shlex(cmd, posix=True, punctuation_chars=True)
         lex.whitespace_split = True
+        lex.commenters = ""  # shlex behandelt '#' standardmäßig als Kommentar und verwirft den Rest – Bash nur am Wortanfang: 'echo a#b; touch x' wäre sonst durchgerutscht (Review-Befund H1)
         tokens = list(lex)
     except ValueError as e:  # z. B. unausgewogene Anführungszeichen
         return f"Befehl nicht eindeutig parsbar ({e})"
