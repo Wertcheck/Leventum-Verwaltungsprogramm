@@ -70,6 +70,38 @@ def allocated(db: Session, charge_id: int, as_of: date | None = None) -> Decimal
     return (Decimal(v) if not isinstance(v, Decimal) else v).quantize(Decimal("0.01"))
 
 
+_IN_CHUNK = 500   # unter dem SQLite-Variablenlimit (je nach Build 999)
+
+
+def _allocated_grouped(db: Session, target, ids: list[int] | None, as_of: date | None) -> dict[int, Decimal]:
+    """Summe der Zuordnungen je Ziel-ID (`target` = PaymentAllocation.charge_id | .invoice_id) in EINER Abfrage (je 500 IDs).
+    Semantik identisch zu `allocated`/`payments.invoice_allocated`: bei `as_of` nur Zahlungen mit booking_date <= as_of (Storno/Gegenbuchung wirken ab
+    eigenem Buchungsdatum), Ergebnis je Ziel auf 0,01 quantisiert; Ziele ohne Zuordnung fehlen im Ergebnis (= 0,00). `ids=None`: alle Ziele."""
+    from leventum.models import Payment
+    if ids is not None and not ids:
+        return {}
+    out: dict[int, Decimal] = {}
+    for i in (range(0, len(ids), _IN_CHUNK) if ids is not None else (None,)):
+        stmt = select(target, func.sum(PaymentAllocation.amount)).where(target.is_not(None))
+        if ids is not None:
+            stmt = stmt.where(target.in_(ids[i:i + _IN_CHUNK]))
+        if as_of is not None:
+            stmt = stmt.join(Payment, Payment.id == PaymentAllocation.payment_id).where(Payment.booking_date <= as_of)
+        for tid, v in db.execute(stmt.group_by(target)):
+            out[tid] = (Decimal(v) if not isinstance(v, Decimal) else v).quantize(Decimal("0.01"))
+    return out
+
+
+def allocated_by_charge(db: Session, charge_ids: list[int] | None, as_of: date | None = None) -> dict[int, Decimal]:
+    """Gruppierte Variante von `allocated` (kein N+1): {charge_id: Summe}; fehlende ID = 0,00. `charge_ids=None` = alle Sollstellungen."""
+    return _allocated_grouped(db, PaymentAllocation.charge_id, charge_ids, as_of)
+
+
+def allocated_by_invoice(db: Session, invoice_ids: list[int] | None, as_of: date | None = None) -> dict[int, Decimal]:
+    """Gruppierte Variante von `payments.invoice_allocated` (kein N+1): {invoice_id: Summe}; fehlende ID = 0,00."""
+    return _allocated_grouped(db, PaymentAllocation.invoice_id, invoice_ids, as_of)
+
+
 def open_amount(db: Session, charge: Charge, as_of: date | None = None) -> Decimal:
     return q(charge.amount - allocated(db, charge.id, as_of))
 

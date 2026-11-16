@@ -21,7 +21,7 @@ from leventum import domain
 from leventum.models import (Bed, Charge, Invoice, Lease, LeaseAllocationWeight, Payment, PaymentAllocation, Property, RentableUnit, Room, Unit,
                              UtilityStatement)
 from leventum.services import payments as pay
-from leventum.services.charges import BILLABLE_STATUS, month_range, monthly_components, open_amount, receivable_position  # receivable_position: eine Quelle für offene/überfällige Forderungen (ADR 0002)
+from leventum.services.charges import BILLABLE_STATUS, allocated_by_charge, allocated_by_invoice, month_range, monthly_components, receivable_position  # receivable_position: eine Quelle für offene/überfällige Forderungen (ADR 0002)
 from leventum.services.errors import ServiceError
 from leventum.services.leases import OPEN_END, effective_end
 from leventum.services.master import chain as ru_chain, get_or_404, prefixed
@@ -251,8 +251,10 @@ class Engine:
     # -- Offen (Stichtag = Periodenende) --
     def _open(self, as_of: date, prefix: str = ""):
         """Offene Posten zum Stichtag `as_of` (Fälligkeit ≤ Stichtag; überfällig = Fälligkeit < Stichtag; Zahlungen bis einschließlich Stichtag)."""
-        for c in self.db.scalars(select(Charge).where(Charge.voided_at.is_(None), Charge.due_date <= as_of)):
-            o = open_amount(self.db, c, as_of)
+        charges = list(self.db.scalars(select(Charge).where(Charge.voided_at.is_(None), Charge.due_date <= as_of)))
+        paid = allocated_by_charge(self.db, None, as_of) if charges else {}   # EINE gruppierte Abfrage statt je Forderung eine (identische Semantik wie open_amount)
+        for c in charges:
+            o = q(c.amount - paid.get(c.id, ZERO))
             if o <= 0:
                 continue
             lease = self.db.get(Lease, c.lease_id)
@@ -260,8 +262,10 @@ class Engine:
             self._add(lease, f"{prefix}open_{base}", o)
             if c.due_date < as_of:
                 self._add(lease, f"{prefix}overdue_{base}", o)
-        for inv in self.db.scalars(select(Invoice).where(Invoice.voided_at.is_(None), Invoice.invoice_date <= as_of)):
-            o = q(inv.amount - pay.invoice_allocated(self.db, inv.id, as_of))
+        invoices = list(self.db.scalars(select(Invoice).where(Invoice.voided_at.is_(None), Invoice.invoice_date <= as_of)))
+        inv_paid = allocated_by_invoice(self.db, None, as_of) if invoices else {}
+        for inv in invoices:
+            o = q(inv.amount - inv_paid.get(inv.id, ZERO))
             if o > 0:
                 self._attach_invoice(inv, f"{prefix}open_invoices", o)
 
