@@ -35,7 +35,7 @@ Verbindlich: `CLAUDE.md` und alle Dateien in `.claude/rules/`. Übergabeformat u
 - `.claude/skills/financial-calculations/SKILL.md`
 
 ## Verbindliche Regeln
-- **Nichts verändern.** Keine Dateien anlegen/ändern/löschen, kein Git-Schreiben, kein Commit/Push, nichts in Lexono. Schreibversuche scheitern technisch an der Werkzeugliste (Edit/Write/NotebookEdit fehlen) und – NUR wenn der Hook aktiv ist (vertrauter Workspace, Preflight bestanden) – am Hook; Bash-Schreibzugriffe verhindert allein der Runner (Read-only-Mounts). Versuche das nicht zu umgehen.
+- **Nichts verändern.** Keine Dateien anlegen/ändern/löschen, kein Git-Schreiben, kein Commit/Push, nichts in Lexono. Schreibversuche scheitern technisch an der Werkzeugliste (Edit/Write/NotebookEdit fehlen) und – NUR wenn der Hook aktiv ist (vertrauter Workspace, Preflight bestanden) – am Hook; Bash-Schreibzugriffe soll allein der Runner (Read-only-Mounts, unprivilegierter Benutzer) verhindern – wirksam gegen den Zielprozess, **nicht** gegen einen root-Dev-Agenten im selben VM (gemessen: root hebt ro-Mounts per `nsenter` auf). Versuche das nicht zu umgehen.
 - Bash ausschließlich als `scripts/ro_run.sh <befehl…>` – keine Verkettung, Pipes, Umleitungen oder Expansionen außerhalb der Anführungszeichen (der Hook blockiert sie).
 - Nicht Autor der geprüften Arbeit sein; die eigene Prüfung nicht als „Freigabe“ bezeichnen.
 - Nichts behaupten, was nicht gelesen oder ausgeführt wurde.

@@ -25,6 +25,7 @@ python scripts/validate_agent_system.py                              # Selbstpr�
 scripts/ro_run.sh <befehl…>                                          # Read-only-Ausführung (Prüf-Agenten; Linux, root)
 python3 -I scripts/check_file_set.py snapshot --out <außerhalb> --key-file <außerhalb> | check --snapshot … --key-file … --allowed … | overlap …   # Dateimengen-Kontrolle (Exit 2 ≠ OK)
 python3 -I scripts/review_preflight.py anchor-cmd --pin <PIN> --blob <BLOB>   # druckt den Preflight-Ankeraufruf (Text vor Ausführung gegen das PIN-Objekt prüfen!); Ablauf: .claude/rules/60-collaboration.md; sonst independent-reviewer-static
+python3 -I scripts/review_handoff.py manifest|verify|check-report|remote-check …   # Commit-Übergabe-Integrität (ADR 0003; kein Isolationsmechanismus)
 scripts/protect_files.sh protect|unprotect|status                    # Schutzdateien immutable (nur root; kein Schutz gegen root-Agenten)
 ```
 Wichtige Dokumente: `docs/ABSCHLUSSBERICHT_MASTER_REVIEW.md` (Ist-Stand/Einschränkungen), `docs/04-sicherheit-backup.md`, `docs/WINDOWS_TESTPLAN.md`, `docs/07-annahmen-und-rechtsfragen.md`.

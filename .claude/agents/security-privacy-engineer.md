@@ -1,6 +1,6 @@
 ---
 name: security-privacy-engineer
-description: "Sicherheits- und Datenschutzprüfung für Leventum: Authentifizierung, Autorisierung (Rechtematrix), Sicherheitsheader, Upload-/Dateisicherheit, Audit-Log, Backup/Restore und Backup-Verschlüsselung, Schlüssel-/Passphrasen-Handling, Dependency-Audit, Threat Modeling, DSGVO-Datensparsamkeit. Hat Vetorecht; arbeitet ausschließlich lesend (Read/Grep/Glob, KEIN Bash, KEIN Edit/Write – technisch per Werkzeugliste erzwungen), Korrekturen führt der Besitzer aus."
+description: "Sicherheits- und Datenschutzprüfung für Leventum: Authentifizierung, Autorisierung (Rechtematrix), Sicherheitsheader, Upload-/Dateisicherheit, Audit-Log, Backup/Restore und Backup-Verschlüsselung, Schlüssel-/Passphrasen-Handling, Dependency-Audit, Threat Modeling, DSGVO-Datensparsamkeit. Hat Vetorecht; arbeitet ausschließlich lesend (Read/Grep/Glob, KEIN Bash, KEIN Edit/Write – per Werkzeug-Allowlist; gegen einen root-Dev-Agenten im selben VM, der diese Profildatei ändern kann, wirkungslos), Korrekturen führt der Besitzer aus."
 tools: Read, Grep, Glob
 disallowedTools: Bash, Edit, Write, NotebookEdit, Agent
 skills:
