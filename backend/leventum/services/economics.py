@@ -462,6 +462,7 @@ def current_month_figures(db: Session, today: date | None = None) -> dict:
     first, last = date(y, m, 1), date(y, m, monthrange(y, m)[1])
     e = Engine(db, first, last)
     rep = e.report("portfolio")
-    vacant_today = vacancy_report(db, first, last, engine=e)["snapshot"]["leaves_vacant"]
+    snap_today = vacancy_report(db, first, last, engine=e)["snapshot"]
+    vacant_today = snap_today["leaves_vacant"]
     return {"main_total": q(res["main_total"]), "main_utility": q(res["main_utility"]), "sub_total": q(res["sub_total"]), "open_receivables": q(open_),
-            "overdue_count": overdue_n, "vacant_leaves": vacant_today, "economic_vacancy_cost": rep["vacancy"]["economic_vacancy_cost"]}
+            "overdue_count": overdue_n, "vacant_leaves": vacant_today, "leaves_total": snap_today["leaves_total"], "leaves_occupied": snap_today["leaves_occupied"], "economic_vacancy_cost": rep["vacancy"]["economic_vacancy_cost"]}

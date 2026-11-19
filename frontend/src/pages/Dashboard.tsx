@@ -9,7 +9,7 @@ import { Icons } from "../components/icons";
 const ICONS: Record<string, keyof typeof Icons> = {
   properties: "building", units: "door", active_main_leases: "file", active_subleases: "contract", active_tenants: "users",
   main_rent_obligations: "euro", sublease_receivables: "euro", open_receivables: "receipt", overdue_receivables: "receipt", overdue_payments: "bell",
-  monthly_utility_costs: "calc", overdue_tasks: "bell", open_repairs: "wrench", physical_vacancy: "door", economic_vacancy_cost: "euro", open_tasks: "check", upcoming_contract_ends: "key", upcoming_main_lease_ends: "file", upcoming_sublease_ends: "contract",
+  monthly_utility_costs: "calc", overdue_tasks: "bell", open_repairs: "wrench", physical_vacancy: "door", occupancy_rate: "building", economic_vacancy_cost: "euro", open_tasks: "check", upcoming_contract_ends: "key", upcoming_main_lease_ends: "file", upcoming_sublease_ends: "contract",
 };
 
 /** Fachliche Reihenfolge der Forderungs-/Fristen-Kennzahlen; alle übrigen behalten die Reihenfolge des Backends. */

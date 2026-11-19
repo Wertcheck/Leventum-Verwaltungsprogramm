@@ -38,8 +38,8 @@ def _set_cookie(resp: Response, token: str, settings: Settings) -> None:
 
 
 @public.get("/health")
-def health():
-    return {"status": "ok"}
+def health(request: Request):
+    return {"status": "ok", "demo": bool(request.app.state.settings.demo_mode)}
 
 
 @public.get("/auth/status")

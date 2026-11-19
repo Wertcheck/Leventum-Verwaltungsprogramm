@@ -1,0 +1,27 @@
+# Baut den Windows-Installer auf einem Windows-Runner und führt den stillen Installer-Smoke-Test aus.
+# STATUS: nie ausgeführt (nur manuell auslösbar). Ein grüner Lauf belegt Bau + Server-Smoke, NICHT den Fensterbetrieb (WebView2) und ersetzt keinen Test auf einem sauberen Windows-Rechner.
+name: windows-installer
+on: workflow_dispatch
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.13" }
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - name: Inno Setup installieren
+        run: choco install innosetup --no-progress -y
+      - name: Installer bauen
+        run: powershell -ExecutionPolicy Bypass -File packaging\build_windows.ps1
+      - name: Installer-Smoke-Test (still, Serverebene)
+        run: powershell -ExecutionPolicy Bypass -File packaging\installer_smoke.ps1 -Setup build\installer\Leventum_Setup.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Leventum_Setup
+          path: |
+            build/installer/Leventum_Setup.exe
+            build/installer/SHA256.txt

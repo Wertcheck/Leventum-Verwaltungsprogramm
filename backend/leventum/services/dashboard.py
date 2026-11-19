@@ -22,6 +22,7 @@ KPI_DEFINITIONS = [
     ("overdue_tasks", "Überfällige Aufgaben", "E"),
     ("open_repairs", "Offene Reparaturen", "E"),
     ("physical_vacancy", "Physischer Leerstand", "D"),
+    ("occupancy_rate", "Auslastungsquote", "D"),
     ("economic_vacancy_cost", "Wirtschaftlicher Leerstand (Monat)", "D"),
     ("upcoming_contract_ends", "Anstehende Vertragsenden", "C"),
     ("upcoming_main_lease_ends", "Anstehende Hauptmietvertragsenden", "C"),
@@ -29,6 +30,7 @@ KPI_DEFINITIONS = [
 ]
 
 from datetime import date
+from decimal import ROUND_HALF_UP, Decimal
 
 from sqlalchemy import func, select
 
@@ -57,6 +59,14 @@ def _units(db):
     """Aktive Wohneinheiten aktiver Objekte (analog economics.Structure)."""
     return db.scalar(select(func.count()).select_from(Unit).join(Property, Property.id == Unit.property_id)
                      .where(Unit.is_active.is_(True), Property.is_active.is_(True)))
+
+
+def _occupancy_rate(fig: dict) -> str | None:
+    """Anteil heute belegter kleinster Einheiten in Prozent (1 Nachkommastelle, ROUND_HALF_UP); ohne Einheiten None (keine Quote statt 0 %)."""
+    total = fig["leaves_total"]
+    if not total:
+        return None
+    return format((Decimal(fig["leaves_occupied"]) * 100 / total).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP), "f")
 
 
 def _fig(db):
@@ -94,6 +104,7 @@ DEFINITIONS = {
     "overdue_tasks": "Offene Aufgaben mit Fälligkeit vor heute.",
     "open_repairs": "Reparaturen mit Status gemeldet, terminiert, in Arbeit oder wartet.",
     "physical_vacancy": "Anzahl heute unbelegter kleinster Einheiten (Bett, Zimmer ohne Betten, Wohneinheit ohne Zimmer) ohne laufenden Untermietvertrag.",
+    "occupancy_rate": "Anteil der heute belegten kleinsten Einheiten (Bett, Zimmer ohne Betten, Wohneinheit ohne Zimmer) an allen vermietbaren kleinsten Einheiten, nach Anzahl (nicht nach Fläche). Gegenstück zum physischen Leerstand; zeigt immer den heutigen Stand.",
     "economic_vacancy_cost": "Hauptmiete-Soll (Kalt+NK) des laufenden Monats an Tagen mit Mietverpflichtung, aber ohne laufenden Untermietvertrag (Teil der Hauptmietkosten).",
     "upcoming_contract_ends": "Zum Stichtag laufende Haupt- und Untermietverträge (Mietbeginn erreicht), deren wirksames Ende zwischen Stichtag und Stichtag + Vorschauzeitraum liegt (beide Grenzen inklusiv). Der Vorschauzeitraum ist konfigurierbar (Einstellung contract_end_preview_days, Standard 90 Tage). Verträge mit offenem Ende und nicht begonnene Verträge zählen nicht. Summe aus Hauptmiet- und Untermietvertragsenden.",
     "upcoming_main_lease_ends": "Zum Stichtag laufende Hauptmietverträge (Mietbeginn erreicht), deren wirksames Ende zwischen Stichtag und Stichtag + Vorschauzeitraum liegt (beide Grenzen inklusiv; Einstellung contract_end_preview_days, Standard 90 Tage). Offenes Ende und nicht begonnene Verträge zählen nicht.",
@@ -150,6 +161,7 @@ IMPLEMENTED: dict = {
     "open_tasks": lambda db, a, n: _open_tasks(db), "overdue_tasks": lambda db, a, n: _overdue_tasks(db), "open_repairs": lambda db, a, n: _open_repairs(db),
     "overdue_payments": lambda db, a, n: _pos(db, a)["overdue_count"],
     "physical_vacancy": lambda db, a, n: _fig(db)["vacant_leaves"],
+    "occupancy_rate": lambda db, a, n: _occupancy_rate(_fig(db)),
     "properties": lambda db, a, n: db.scalar(select(func.count()).select_from(Property).where(Property.is_active.is_(True))),
     "units": lambda db, a, n: _units(db),
     "active_main_leases": lambda db, a, n: len(_running(db, "main", a)),
@@ -193,6 +205,9 @@ def build_dashboard(db: Session, as_of: date | str | None = None, preview_days: 
             kpis.append({"key": key, "label": label, "value": format(IMPLEMENTED_MONEY[key](db, as_of, preview_days), "f"), "format": "eur", "available": True, "planned_phase": phase})
         elif fn is None:
             kpis.append({"key": key, "label": label, "value": None, "available": False, "planned_phase": phase})
+        elif key == "occupancy_rate":
+            v = fn(db, as_of, preview_days)  # None, wenn es keine vermietbaren Einheiten gibt -> „–“ statt 0 %
+            kpis.append({"key": key, "label": label, "value": v, "format": "percent", "available": v is not None, "planned_phase": phase})
         else:
             kpis.append({"key": key, "label": label, "value": fn(db, as_of, preview_days), "available": True, "planned_phase": phase})
     for k in kpis:

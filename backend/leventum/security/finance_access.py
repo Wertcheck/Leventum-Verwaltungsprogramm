@@ -17,7 +17,7 @@ FINANCE_PERMISSION = "finance:read"
 FINANCE_KPI_KEYS = frozenset({"main_rent_obligations", "sublease_receivables", "open_receivables", "overdue_payments",
                               "monthly_utility_costs", "economic_vacancy_cost", "overdue_receivables"})
 NON_FINANCE_KPI_KEYS = frozenset({"properties", "units", "active_main_leases", "active_subleases", "active_tenants", "open_tasks", "overdue_tasks",
-                                  "open_repairs", "physical_vacancy", "upcoming_contract_ends",
+                                  "open_repairs", "physical_vacancy", "occupancy_rate", "upcoming_contract_ends",
                                   # Vertragsenden getrennt (Phase I, Entscheidung 2.2): reine Anzahlen, keine Finanzdaten
                                   "upcoming_main_lease_ends", "upcoming_sublease_ends"})
 

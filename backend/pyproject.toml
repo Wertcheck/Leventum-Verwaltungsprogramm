@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-desktop = ["pywebview>=5.0"]
+desktop = ["pywebview>=5.0", "httpx>=0.27"]  # httpx: Demo-Seeding (fastapi.testclient)
 dev = ["pytest>=8", "httpx>=0.27"]
 
 [build-system]

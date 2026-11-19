@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     backup_max_age_hours: int = 72
     document_retention_days: int = 3650  # Annahme (nicht rechtlich geprüft): endgültige Löschung frühestens 10 Jahre nach dem Upload
     contract_end_preview_days: int = Field(default=90, ge=1, le=730)  # Vorschauzeitraum „anstehende Vertragsenden“ (Dashboard + Hinweise)
+    demo_mode: bool = False  # nur vom Demo-Starter gesetzt (LEVENTUM_DEMO_MODE): zeigt in der Oberfläche „Demo-Daten“ an
     cookie_secure: bool = False  # True bei HTTPS-Serverbetrieb
 
     @property

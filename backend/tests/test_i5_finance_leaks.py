@@ -586,7 +586,7 @@ def test_k1_every_kpi_is_classified_exactly_once():
     assert FA.FINANCE_KPI_KEYS & non_fin == set()
     assert non_fin <= keys, f"veraltete nicht-finanzielle Schlüssel: {sorted(non_fin - keys)}"
     assert set(non_fin) == {"properties", "units", "active_main_leases", "active_subleases", "active_tenants", "open_tasks", "overdue_tasks", "open_repairs",
-                            "physical_vacancy", "upcoming_contract_ends",
+                            "physical_vacancy", "occupancy_rate", "upcoming_contract_ends",
                             "upcoming_main_lease_ends", "upcoming_sublease_ends"}  # Phase I: getrennte Vertragsenden sind nicht finanziell (Orchestrator-Entscheidung 2.2)
 
 

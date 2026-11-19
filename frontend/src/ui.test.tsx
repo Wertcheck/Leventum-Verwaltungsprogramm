@@ -10,4 +10,8 @@ describe("KpiCard", () => {
     render(<KpiCard icon={null} label="Immobilien" value={0} available />);
     expect(screen.getByTestId("kpi-Immobilien").textContent).toBe("0");
   });
+  it("zeigt Prozentwerte mit Komma und Prozentzeichen", () => {
+    render(<KpiCard icon={null} label="Auslastungsquote" value="87.5" format="percent" available />);
+    expect(screen.getByTestId("kpi-Auslastungsquote").textContent).toContain("87,5 %");
+  });
 });

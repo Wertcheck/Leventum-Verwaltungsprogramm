@@ -1,4 +1,6 @@
-# Windows-Build- und Installer-Plan (PLAN – NICHT UMGESETZT)
+# Windows-Build- und Installer-Plan (PLAN – teilweise vorbereitet, siehe `WINDOWS_INSTALLER.md` und ADR 0004)
+
+> Aktualisierung: PyInstaller-Spec, Inno-Skript, Build- und Smoke-Skripte existieren jetzt unter `packaging/` (nie unter Windows ausgeführt). Der folgende Text ist der ursprüngliche Plan.
 
 **Status: Geplant (Entwurf), nicht implementiert, nicht getestet, nicht unter Windows getestet, nicht unabhängig geprüft.**
 Ein Installer, ein PyInstaller-Spec oder ein Build-Skript **existiert nicht**. Dieses Dokument sammelt Entscheidungsgrundlagen für die nächste Phase.

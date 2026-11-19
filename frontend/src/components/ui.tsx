@@ -29,7 +29,7 @@ export function KpiCard({ icon, label, value, available, hint, format, definitio
       <div className="ic">{icon}</div>
       <div>
         <div className="label" title={definition}>{label}{definition && <span className="kpi-info" aria-label={`Definition: ${definition}`} title={definition}> ⓘ</span>}</div>
-        <div className={`value ${available ? "" : "na"} ${format === "eur" ? "money" : ""}`} data-testid={`kpi-${label}`}>{available && value !== null ? (format === "eur" ? eurText(String(value)) : value) : "–"}</div>
+        <div className={`value ${available ? "" : "na"} ${format === "eur" ? "money" : ""}`} data-testid={`kpi-${label}`}>{available && value !== null ? (format === "eur" ? eurText(String(value)) : format === "percent" ? `${String(value).replace(".", ",")} %` : value) : "–"}</div>
         {hint && <div className="hint">{hint}</div>}
         {badge && <span className="badge neutral kpi-badge" title={badgeTitle}>{badge}</span>}
       </div>

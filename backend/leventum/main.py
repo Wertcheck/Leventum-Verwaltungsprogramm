@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 from alembic import command
@@ -23,12 +24,16 @@ from leventum import domain
 from leventum.services.errors import ServiceError
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
+# Gebündelter Betrieb (PyInstaller): Ressourcen (alembic/, alembic.ini, Frontend) liegen im Entpackordner sys._MEIPASS (onedir: _internal).
+FROZEN = bool(getattr(sys, "frozen", False))
+RESOURCE_DIR = Path(getattr(sys, "_MEIPASS", BACKEND_DIR)) if FROZEN else BACKEND_DIR
+DEFAULT_FRONTEND_DIST = RESOURCE_DIR / "frontend_dist" if FROZEN else BACKEND_DIR.parent / "frontend" / "dist"
 UNSAFE = {"POST", "PUT", "PATCH", "DELETE"}
 
 
 def run_migrations(settings: Settings) -> None:
-    cfg = AlembicConfig(str(BACKEND_DIR / "alembic.ini"))
-    cfg.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
+    cfg = AlembicConfig(str(RESOURCE_DIR / "alembic.ini"))
+    cfg.set_main_option("script_location", str(RESOURCE_DIR / "alembic"))
     cfg.set_main_option("sqlalchemy.url", settings.db_url.replace("%", "%%"))
     command.upgrade(cfg, "head")
 
@@ -103,7 +108,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(finance_router, prefix="/api/v1", dependencies=[Depends(current_user)])
     app.include_router(operations_router, prefix="/api/v1", dependencies=[Depends(current_user)])
 
-    dist = settings.frontend_dist or (BACKEND_DIR.parent / "frontend" / "dist")
+    dist = settings.frontend_dist or DEFAULT_FRONTEND_DIST
     if dist.is_dir():
         app.mount("/assets", StaticFiles(directory=dist / "assets"), name="assets")
 

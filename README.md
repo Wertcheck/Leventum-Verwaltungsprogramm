@@ -15,6 +15,17 @@ pip install -e "backend[desktop]" && python -m leventum.desktop   # Fenster via 
 ```
 Frontend-Entwicklung mit Hot-Reload: Backend auf Port 8000 starten, `npm run dev` (Proxy auf `/api`).
 
+## Demo starten (erfundene Daten)
+```bash
+. .venv/bin/activate && python -m leventum.demo --open     # legt Demo-Daten an (eigenes Verzeichnis neben dem echten), startet den Server, gibt Benutzer/Passwort aus
+python -m leventum.demo --reset                            # Demo-Daten neu anlegen (löscht nur Verzeichnisse mit Markierung .leventum-demo)
+```
+Die Demo schreibt nie in das echte Datenverzeichnis, legt alle Daten über die REST-API an (Termine relativ zu heute) und blendet im Programm einen Demo-Hinweis ein.
+Ablauf-Prüfung der Oberfläche gegen den laufenden Demo-Server: `DEMO_URL=… DEMO_PASSWORD=… NODE_PATH=$(npm root -g) node frontend/e2e/demo-flow.cjs`.
+
+## Windows-Installer
+Vorbereitet (`packaging/`, `docs/WINDOWS_INSTALLER.md`), aber **nicht gebaut und nicht unter Windows getestet**.
+
 ## Datenspeicher
 Standard: `%LOCALAPPDATA%\Leventum` (Windows) bzw. `~/.local/share/leventum`. Überschreibbar über `LEVENTUM_DATA_DIR`, `LEVENTUM_DATABASE_URL`, `LEVENTUM_DOCUMENTS_DIR`, `LEVENTUM_BACKUP_DIR`.
 Schema-Änderungen ausschließlich über Alembic (`backend/alembic`); Migrationen laufen beim Start automatisch.

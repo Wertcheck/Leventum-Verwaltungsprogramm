@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { api } from "../lib/api";
 import { Icons } from "./icons";
@@ -78,10 +78,13 @@ function Topbar({ user, onLogout }: { user: User; onLogout: () => void }) {
 }
 
 export default function AppShell({ user, onLogout }: { user: User; onLogout: () => void }) {
+  const [demo, setDemo] = useState(false);
+  useEffect(() => { api<{ demo?: boolean }>("/health").then((h) => setDemo(!!h.demo)).catch(() => undefined); }, []);
   return (
     <div className="shell">
       <Sidebar />
       <div className="main">
+        {demo && <div className="demo-banner" role="status" data-testid="demo-banner"><strong>Demo-Modus</strong> – alle Daten (Personen, Objekte, Verträge, Zahlungen) sind erfunden und dienen nur der Vorführung.</div>}
         <Topbar user={user} onLogout={onLogout} />
         <main className="content"><Outlet /></main>
       </div>
