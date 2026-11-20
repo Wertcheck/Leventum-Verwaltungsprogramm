@@ -1,4 +1,6 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useState, type FormEvent, type ReactNode } from "react";
+import { Modal } from "./Modal";
+import { DateInput } from "./DateInput";
 
 /** Eigene Dialoge statt window.prompt/confirm/alert (in pywebview/WebView2 nicht verlässlich, schlechte Bedienung). */
 export interface AskOptions { title?: string; type?: "text" | "date" | "textarea" | "password"; initial?: string; required?: boolean; confirmLabel?: string; danger?: boolean }
@@ -30,10 +32,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
 function DialogView({ req, onDone }: { req: Req; onDone: () => void }) {
   const [value, setValue] = useState(req.kind === "ask" ? req.o.initial ?? "" : "");
   const [err, setErr] = useState("");
-  const ref = useRef<HTMLInputElement & HTMLTextAreaElement>(null);
-  useEffect(() => { ref.current?.focus(); }, []);
   const cancel = () => { if (req.kind === "ask") req.resolve(null); else if (req.kind === "confirm") req.resolve(false); else req.resolve(); onDone(); };
-  useEffect(() => { const k = (e: KeyboardEvent) => e.key === "Escape" && cancel(); window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); });
   function submit(e: FormEvent) {
     e.preventDefault();
     if (req.kind === "ask") {
@@ -46,20 +45,19 @@ function DialogView({ req, onDone }: { req: Req; onDone: () => void }) {
   const o = req.kind === "ask" ? req.o : req.kind === "confirm" ? req.o : {};
   const danger = "danger" in o && o.danger;
   const title = ("title" in o && o.title) || (req.kind === "confirm" ? "Bitte bestätigen" : req.kind === "notify" ? "Hinweis" : "Eingabe erforderlich");
+  // Gleiche Popup-Basis wie alle anderen Dialoge (Fokus, Escape, ARIA, Hintergrund inaktiv); Escape = Abbrechen
   return (
-    <div className="modal-bg" role="dialog" aria-modal="true" aria-label={title}>
-      <form className="modal card dialog" onSubmit={submit}>
-        <h2>{title}</h2>
-        <p style={{ whiteSpace: "pre-wrap" }}>{req.message}</p>
-        {req.kind === "ask" && (req.o.type === "textarea"
-          ? <textarea ref={ref} className="field" rows={4} value={value} onChange={(e) => setValue(e.target.value)} aria-label={req.message} />
-          : <input ref={ref} className="field" type={req.o.type ?? "text"} value={value} onChange={(e) => setValue(e.target.value)} aria-label={req.message} />)}
-        {err && <div className="alert err" role="alert">{err}</div>}
-        <div className="toolbar" style={{ justifyContent: "flex-end", margin: 0 }}>
-          {req.kind !== "notify" && <button type="button" className="btn" onClick={cancel}>Abbrechen</button>}
-          <button type="submit" className={`btn ${danger ? "danger" : "primary"}`}>{("confirmLabel" in o && o.confirmLabel) || (req.kind === "confirm" ? "Bestätigen" : "OK")}</button>
-        </div>
-      </form>
-    </div>
+    <Modal as="form" onSubmit={submit} title={title} size="sm" className="dialog" onClose={cancel}>
+      <p style={{ whiteSpace: "pre-wrap" }}>{req.message}</p>
+      {req.kind === "ask" && (req.o.type === "textarea"
+        ? <textarea data-autofocus className="field" rows={4} value={value} onChange={(e) => setValue(e.target.value)} aria-label={req.message} />
+        : req.o.type === "date" ? <DateInput ariaLabel={req.message} value={value} onChange={setValue} required={req.o.required} />
+        : <input data-autofocus className="field" type={req.o.type ?? "text"} value={value} onChange={(e) => setValue(e.target.value)} aria-label={req.message} />)}
+      {err && <div className="alert err" role="alert">{err}</div>}
+      <div className="toolbar" style={{ justifyContent: "flex-end", margin: 0 }}>
+        {req.kind !== "notify" && <button type="button" className="btn" onClick={cancel}>Abbrechen</button>}
+        <button type="submit" className={`btn ${danger ? "danger" : "primary"}`}>{("confirmLabel" in o && o.confirmLabel) || (req.kind === "confirm" ? "Bestätigen" : "OK")}</button>
+      </div>
+    </Modal>
   );
 }

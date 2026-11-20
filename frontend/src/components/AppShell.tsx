@@ -5,12 +5,12 @@ import { Icons } from "./icons";
 import { NAV, isGroup } from "../nav";
 import type { User } from "../lib/api";
 
-function Sidebar() {
+function Sidebar({ open: drawerOpen }: { open: boolean }) {
   const loc = useLocation();
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const settings = NAV[NAV.length - 1];
   return (
-    <aside className="sidebar" aria-label="Hauptnavigation">
+    <aside id="sidebar" className={`sidebar ${drawerOpen ? "open" : ""}`} aria-label="Hauptnavigation">
       <div className="logo"><img src="/logo.png" alt="Leventum Real Estate" /></div>
       {NAV.slice(0, -1).map((e) => {
         if (!isGroup(e)) {
@@ -62,10 +62,11 @@ function GlobalSearch() {
   );
 }
 
-function Topbar({ user, onLogout }: { user: User; onLogout: () => void }) {
+function Topbar({ user, onLogout, navOpen, onToggleNav }: { user: User; onLogout: () => void; navOpen: boolean; onToggleNav: () => void }) {
   const [menu, setMenu] = useState(false);
   return (
     <header className="topbar">
+      <button type="button" className="icon-btn nav-toggle" id="nav-toggle" aria-label="Navigation" aria-controls="sidebar" aria-expanded={navOpen} onClick={onToggleNav}><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg></button>
       <GlobalSearch />
       <button className="icon-btn" aria-label="Benachrichtigungen" title="Keine Benachrichtigungen"><Icons.bell size={26} /></button>
       <div className="user-menu" onClick={() => setMenu(!menu)} role="button" tabIndex={0} aria-haspopup="menu" aria-expanded={menu}>
@@ -78,14 +79,23 @@ function Topbar({ user, onLogout }: { user: User; onLogout: () => void }) {
 }
 
 export default function AppShell({ user, onLogout }: { user: User; onLogout: () => void }) {
-  const [demo, setDemo] = useState(false);
-  useEffect(() => { api<{ demo?: boolean }>("/health").then((h) => setDemo(!!h.demo)).catch(() => undefined); }, []);
+  // Fester Rahmen: Seitenleiste und Kopfzeile bleiben stehen, nur der Inhaltsbereich scrollt; bei schmalen Fenstern ist die Navigation ein Drawer.
+  const [navOpen, setNavOpen] = useState(false);
+  const loc = useLocation();
+  useEffect(() => { setNavOpen(false); }, [loc.pathname]);
+  useEffect(() => {
+    if (!navOpen) return;
+    const k = (e: KeyboardEvent) => { if (e.key === "Escape") { setNavOpen(false); document.getElementById("nav-toggle")?.focus(); } };
+    document.addEventListener("keydown", k);
+    document.querySelector<HTMLElement>("#sidebar .nav-item")?.focus();
+    return () => document.removeEventListener("keydown", k);
+  }, [navOpen]);
   return (
     <div className="shell">
-      <Sidebar />
+      <Sidebar open={navOpen} />
+      {navOpen && <div className="nav-scrim" onClick={() => setNavOpen(false)} aria-hidden="true" />}
       <div className="main">
-        {demo && <div className="demo-banner" role="status" data-testid="demo-banner"><strong>Demo-Modus</strong> – alle Daten (Personen, Objekte, Verträge, Zahlungen) sind erfunden und dienen nur der Vorführung.</div>}
-        <Topbar user={user} onLogout={onLogout} />
+        <Topbar user={user} onLogout={onLogout} navOpen={navOpen} onToggleNav={() => setNavOpen((o) => !o)} />
         <main className="content"><Outlet /></main>
       </div>
     </div>

@@ -69,11 +69,11 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   });
   await test("05 Sollstellungen: Vorschau, Rückwirkung nur nach Bestätigung, keine Doppelbuchung", async () => {
     await p.goto(base + "/finanzen"); await p.click("text=Sollstellungen erzeugen");
-    await p.fill(".modal input[type=month] >> nth=0", "2026-01"); await p.fill(".modal input[type=month] >> nth=1", "2026-03");
+    await p.fill(".modal input[data-kind=month] >> nth=0", "2026-01"); await p.fill(".modal input[data-kind=month] >> nth=1", "2026-03");
     await p.click(".modal button:has-text('Vorschau berechnen')"); await p.waitForSelector("[data-testid=charge-preview]");
     expect(await p.locator(".modal button.primary").isDisabled(), "Erzeugen trotz fehlender Rückwirkungs-Bestätigung aktiv");
     await p.check(".modal input[type=checkbox]"); await p.click(".modal button.primary"); await p.waitForSelector("text=/12 erzeugt/");
-    await p.click("text=Sollstellungen erzeugen"); await p.fill(".modal input[type=month] >> nth=0", "2026-01"); await p.fill(".modal input[type=month] >> nth=1", "2026-03");
+    await p.click("text=Sollstellungen erzeugen"); await p.fill(".modal input[data-kind=month] >> nth=0", "2026-01"); await p.fill(".modal input[data-kind=month] >> nth=1", "2026-03");
     await p.click(".modal button:has-text('Vorschau berechnen')"); await p.waitForSelector("text=/0 würden erzeugt, 12 sind bereits vorhanden/"); await p.click(".modal button:has-text('Schließen')");
   });
   await test("06 Zahlung, Stornierung per Gegenbuchung mit Begründung", async () => {
@@ -101,7 +101,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     await p.goto(base + "/betriebskosten"); await p.click("button:has-text('Abrechnung erfassen')");
     await p.locator(".modal select").nth(0).selectOption({ label: "Haus Bergmann" });
     await p.locator(".modal select").nth(1).selectOption({ index: 1 });
-    await p.fill(".modal input[type=date] >> nth=0", "2026-01-01"); await p.fill(".modal input[type=date] >> nth=1", "2026-12-31");
+    await p.fill(".modal input[data-kind=date] >> nth=0", "2026-01-01"); await p.fill(".modal input[data-kind=date] >> nth=1", "2026-12-31");
     await p.check(".modal input[type=checkbox] >> nth=0"); await p.click(".modal button.primary:has-text('Anlegen')");
     await p.waitForSelector("text=Positionen");
     await p.locator(".modal select").first().selectOption(String(ct.id)); await p.fill(".modal input[placeholder='480.00']", "480.00");
@@ -199,14 +199,57 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     expect(banner.includes(`Historische Auswertung zum ${pd}.${pm}.${py}`) && banner.includes("nicht alle Kennzahlen sind historisch verfügbar"), "Bannertext: " + banner.slice(0, 120));
     expect((await p.locator(".kpi .kpi-badge:has-text('aktueller Stand')").count()) > 0, "Keine Kennzeichnung 'aktueller Stand' für nicht-historische Kennzahlen");
     await p.fill("#stichtag-input", "2999-01-01"); await p.waitForSelector("[data-testid=stichtag-msg]");
-    expect((await p.inputValue("#stichtag-input")) === past, "Zukunftsdatum wurde übernommen");
+    expect((await p.inputValue("#stichtag-input")) === `${pd}.${pm}.${py}`, "Zukunftsdatum wurde übernommen");  // Anzeige einheitlich TT.MM.JJJJ
     expect((await p.textContent("[data-testid=stichtag-banner]")).includes(`${pd}.${pm}.${py}`), "Stichtag nach Zukunftsdatum verändert");
     await p.click("button:has-text('Heute')"); await p.waitForFunction(() => !document.querySelector("[data-testid=stichtag-banner]"));
-    expect((await p.inputValue("#stichtag-input")) === today, "Feld nicht auf heute zurückgesetzt");
+    expect((await p.inputValue("#stichtag-input")) === today.split("-").reverse().join("."), "Feld nicht auf heute zurückgesetzt");
     expect((await p.locator(".kpi .kpi-badge").count()) === 0, "Badge nach Zurücksetzen noch sichtbar");
     ctxState.pastDay = past;
   });
-  await test("22 Keine JavaScript-Fehler während des gesamten Laufs", async () => { expect(errors.length === 0, errors.slice(0, 3).join(" | ")); });
+  await test("22 Fensterrahmen stabil, keine Demo-Leiste: Dokumenthöhe = Fensterhöhe auf allen Hauptseiten und bei allen Größen", async () => {
+    const orig = p.viewportSize();
+    for (const [w, h] of [[1440, 900], [1280, 800], [1024, 768], [768, 1024], [390, 844]]) {
+      await p.setViewportSize({ width: w, height: h });
+      for (const r of ["/", "/vertraege", "/finanzen", "/aufgaben", "/mieter"]) {
+        await p.goto(base + r); await p.waitForSelector(".content"); await p.waitForTimeout(300);
+        const m = await p.evaluate(() => ({ dh: document.documentElement.scrollHeight, dw: document.documentElement.scrollWidth, banner: document.querySelectorAll("[data-testid=demo-banner], .demo-banner").length }));
+        expect(m.dh === h && m.dw === w && m.banner === 0, `${w}x${h} ${r}: ${JSON.stringify(m)}`);
+      }
+    }
+    await p.setViewportSize(orig);
+  });
+  await test("23 Dashboard-Popup: Kennzahl öffnet zentriertes Popup im Viewport, Hintergrund inaktiv, Escape schließt und gibt Fokus zurück", async () => {
+    await p.goto(base + "/"); await p.waitForSelector("[data-testid='kpi-Immobilien']");
+    const card = p.locator("[data-testid='kpi-Immobilien']").locator("xpath=ancestor::button");
+    await card.focus(); await card.click(); await p.waitForSelector("[role=dialog]");
+    const m = await p.evaluate(() => { const d = document.querySelector("[role=dialog]"), r = d.getBoundingClientRect(); return { inView: r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight, centered: Math.abs((r.left + r.right) / 2 - innerWidth / 2) < 2, focusIn: d.contains(document.activeElement), inert: document.getElementById("root").hasAttribute("inert"), modal: d.getAttribute("aria-modal"), dh: document.documentElement.scrollHeight, wh: innerHeight }; });
+    expect(m.inView && m.centered && m.focusIn && m.inert && m.modal === "true" && m.dh === m.wh, JSON.stringify(m));
+    await p.keyboard.press("Escape"); await p.waitForFunction(() => !document.querySelector("[role=dialog]"));
+    await p.waitForFunction(() => document.activeElement?.classList.contains("kpi-btn"));
+  });
+  await test("24 Popup mit langem Inhalt scrollt intern; Tab bleibt im Popup; Formular-Popup aus Detailansicht (gestapelt) schließt zuerst oben", async () => {
+    await p.setViewportSize({ width: 1024, height: 600 });
+    await p.goto(base + "/"); await p.waitForSelector("h2 button:has-text('Aufgaben')");
+    await p.locator("h2 button:has-text('Aufgaben')").click(); await p.waitForSelector("[role=dialog]"); await p.waitForTimeout(500);
+    const m = await p.evaluate(() => { const d = document.querySelector("[role=dialog]"), b = d.querySelector(".modal-body"), r = d.getBoundingClientRect(); return { fits: r.bottom <= innerHeight && r.top >= 0, bodyScrolls: getComputedStyle(b).overflowY, dh: document.documentElement.scrollHeight, wh: innerHeight }; });
+    expect(m.fits && m.dh === m.wh && /auto|scroll/.test(m.bodyScrolls), JSON.stringify(m));
+    for (let i = 0; i < 25; i++) await p.keyboard.press("Tab");
+    expect(await p.evaluate(() => document.querySelector("[role=dialog]").contains(document.activeElement)), "Fokus verlässt das Popup");
+    await p.click(".modal button:has-text('Aufgabe anlegen')"); await p.waitForTimeout(300);
+    expect((await p.locator("[role=dialog]").count()) === 2, "Formular-Popup nicht gestapelt");
+    await p.keyboard.press("Escape"); await p.waitForTimeout(200);
+    expect((await p.locator("[role=dialog]").count()) === 1, "Escape schloss nicht nur das oberste Popup");
+    await p.keyboard.press("Escape"); await p.waitForFunction(() => !document.querySelector("[role=dialog]"));
+    await p.setViewportSize({ width: 1440, height: 900 });
+  });
+  await test("25 Schmales Fenster: Navigation als Drawer (Menü-Schaltfläche, aria-expanded, Escape)", async () => {
+    await p.setViewportSize({ width: 390, height: 844 }); await p.goto(base + "/"); await p.waitForSelector("#nav-toggle");
+    expect((await p.getAttribute("#nav-toggle", "aria-expanded")) === "false", "Drawer anfangs offen");
+    await p.click("#nav-toggle"); expect((await p.getAttribute("#nav-toggle", "aria-expanded")) === "true", "Drawer öffnet nicht");
+    await p.keyboard.press("Escape"); await p.waitForFunction(() => document.getElementById("nav-toggle").getAttribute("aria-expanded") === "false");
+    await p.setViewportSize({ width: 1440, height: 900 });
+  });
+  await test("26 Keine JavaScript-Fehler während des gesamten Laufs", async () => { expect(errors.length === 0, errors.slice(0, 3).join(" | ")); });
 
   await b.close(); srv.kill(); fs.rmSync(data, { recursive: true, force: true });
   const failed = results.filter((r) => !r[0]);

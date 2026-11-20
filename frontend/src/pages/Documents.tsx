@@ -2,7 +2,7 @@ import { useState } from "react";
 import { upload, ApiError } from "../lib/api";
 import { useFetch } from "../lib/hooks";
 import { Card, EmptyState, PageHeader } from "../components/ui";
-import { Field, Modal, Select } from "../components/Form";
+import { Field, FileInput, Modal, Select } from "../components/Form";
 import { DOC_TYPES, DocRow, type Doc } from "../components/DocPanel";
 
 const ENT: Record<string, string> = { party: "Partei", property: "Objekt", unit: "Wohneinheit", lease: "Vertrag", invoice: "Rechnung", deposit: "Kaution", deposit_transaction: "Kautionsbuchung", payment: "Zahlung", repair: "Reparatur", task: "Aufgabe", communication: "Kommunikation", handover_protocol: "Übergabeprotokoll" };
@@ -41,7 +41,7 @@ export default function DocumentsPage() {
         <Field label="Zuordnung zu"><Select value={f.entity} onChange={(v) => setF({ ...f, entity: v, target: "" })} options={UPLOAD_ENT.map((value) => ({ value, label: ENT[value] }))} /></Field>
         <Field label="Ziel"><Select value={f.target ?? ""} onChange={set("target")} empty="– wählen –" options={targets} /></Field>
         <Field label="Dokumenttyp"><Select value={f.type} onChange={set("type")} options={Object.entries(DOC_TYPES).map(([value, label]) => ({ value, label }))} /></Field>
-        <Field label="Datei (PDF, Bild, Office, CSV/TXT)"><input className="field" type="file" aria-label="Datei" onChange={(e) => setFile(e.target.files?.[0] ?? null)} /></Field>
+        <Field label="Datei (PDF, Bild, Office, CSV/TXT)"><FileInput file={file} onFile={setFile} ariaLabel="Datei" /></Field>
         <div className="full">{err && <div className="alert err">{err}</div>}<button className="btn primary" onClick={save}>Hochladen</button></div></div></Modal>}
     </>
   );

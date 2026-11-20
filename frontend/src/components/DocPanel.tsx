@@ -2,7 +2,7 @@ import { useState } from "react";
 import { api, ApiError, upload } from "../lib/api";
 import { dateDe, useFetch } from "../lib/hooks";
 import { Card } from "./ui";
-import { Select } from "./Form";
+import { FileInput, Select } from "./Form";
 import { useDialogs } from "./Dialogs";
 
 export interface Doc { id: number; original_name: string; mime: string; size: number; doc_type: string; uploaded_at: string; links: { entity_type: string; entity_id: number }[]; deleted_at?: string | null; delete_reason?: string | null }
@@ -39,7 +39,7 @@ export default function DocPanel({ entityType, entityId, title = "Dokumente", de
       {data?.items.map((d) => <DocRow key={d.id} d={d} onChanged={reload} />)}
       <div className="toolbar" style={{ marginTop: 12 }}>
         <Select value={type} onChange={setType} options={Object.entries(DOC_TYPES).map(([value, label]) => ({ value, label }))} />
-        <input className="field" type="file" aria-label="Dokument hochladen" onChange={(e) => { onFile(e.target.files?.[0] ?? null); e.target.value = ""; }} />
+        <FileInput onFile={onFile} ariaLabel="Dokument hochladen" resetAfter />
       </div>
       {err && <div className="alert err">{err}</div>}
     </Card>

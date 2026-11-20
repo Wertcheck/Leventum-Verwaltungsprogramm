@@ -37,10 +37,10 @@ const IBAN = "DE89370400440532013000";
   ok("Verträge 850/180 → 1150/220 angelegt");
   // --- Sollstellungen ---
   await p.goto(base + "/finanzen"); await p.click("text=Sollstellungen erzeugen");
-  await p.fill(".modal input[type=month] >> nth=0", "2026-01"); await p.fill(".modal input[type=month] >> nth=1", "2026-03"); await p.click(".modal button:has-text('Vorschau berechnen')"); await p.waitForSelector("[data-testid=charge-preview]"); await p.check(".modal input[type=checkbox]"); await p.click(".modal button.primary");
+  await p.fill(".modal input[data-kind=month] >> nth=0", "2026-01"); await p.fill(".modal input[data-kind=month] >> nth=1", "2026-03"); await p.click(".modal button:has-text('Vorschau berechnen')"); await p.waitForSelector("[data-testid=charge-preview]"); await p.check(".modal input[type=checkbox]"); await p.click(".modal button.primary");
   await p.waitForSelector("text=/\\d+ erzeugt/"); console.log("Erzeugung:", await p.textContent(".alert.ok, .alert.err"));
   await p.waitForSelector("td:has-text('Kaltmiete')"); ok("Sollstellungen sichtbar");
-  await p.click("text=Sollstellungen erzeugen"); await p.fill(".modal input[type=month] >> nth=0", "2026-01"); await p.fill(".modal input[type=month] >> nth=1", "2026-03"); await p.click(".modal button:has-text('Vorschau berechnen')");
+  await p.click("text=Sollstellungen erzeugen"); await p.fill(".modal input[data-kind=month] >> nth=0", "2026-01"); await p.fill(".modal input[data-kind=month] >> nth=1", "2026-03"); await p.click(".modal button:has-text('Vorschau berechnen')");
   await p.waitForSelector("text=/0 würden erzeugt, 12 sind bereits vorhanden/"); await p.click(".modal button:has-text('Schließen')"); ok("Zweite Erzeugung: keine doppelten Sollstellungen (0 neu, 12 vorhanden)");
   await p.screenshot({ path: "/tmp/shots/d-finanzen.png", fullPage: true });
   // --- Mahnwesen ---
@@ -73,19 +73,19 @@ const IBAN = "DE89370400440532013000";
   // --- Kaution ---
   await p.goto(base + "/kautionen"); await p.click("text=Kaution vereinbaren"); await pick(".modal select", "#2 Untermiete");
   await p.fill(".modal input.field >> nth=0", "2000.00"); await p.click(".modal button.primary"); await p.waitForSelector("td:has-text('2.000,00')");
-  await p.click("button:has-text('Buchung')"); await p.fill(".modal input.field >> nth=0", "2000.00"); await p.fill(".modal input[type=date]", "2026-01-03"); await p.click(".modal button.primary");
+  await p.click("button:has-text('Buchung')"); await p.fill(".modal input.field >> nth=0", "2000.00"); await p.fill(".modal input[data-kind=date]", "2026-01-03"); await p.click(".modal button.primary");
   await p.waitForSelector("text=Gezahlt"); ok("Kaution vereinbart und gebucht (außerhalb der Zahlungen)");
   // --- Rechnung mit Beleg ---
   await p.goto(base + "/rechnungen"); await p.click("text=Rechnung erfassen"); await pick(".modal select", "Haus Bergmann");
-  await p.fill(".modal input.field >> nth=0", "RE-1"); await p.fill(".modal input[type=date]", "2026-01-20"); await p.fill(".modal input.field >> nth=2", "238.00");
+  await p.fill(".modal input.field >> nth=0", "RE-1"); await p.fill(".modal input[data-kind=date]", "2026-01-20"); await p.fill(".modal input.field >> nth=2", "238.00");
   await p.setInputFiles("input[aria-label=Belegdatei]", { name: "beleg.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4 test") });
   await p.click(".modal button.primary"); await p.waitForSelector("td:has-text('RE-1')"); ok("Rechnung mit Beleg erfasst");
   // --- Auswertungen ---
-  await p.goto(base + "/auswertungen/wirtschaftlichkeit"); await p.fill("input[type=month] >> nth=0", "2026-01"); await p.fill("input[type=month] >> nth=1", "2026-01");
+  await p.goto(base + "/auswertungen/wirtschaftlichkeit"); await p.fill("input[data-kind=month] >> nth=0", "2026-01"); await p.fill("input[data-kind=month] >> nth=1", "2026-01");
   await p.waitForSelector("text=Soll (laut Verträgen)"); await p.waitForFunction(() => document.body.textContent.includes("1.370,00"));
   const txt2 = await p.textContent("main"); console.log("Wirtschaftlichkeit enthält:", ["1.370,00", "1.030,00", "102,00", "kein Gewinn", "Ist (Zahlungen)", "238,00"].map((s) => `${s}:${txt2.includes(s)}`).join(" "));
   await p.screenshot({ path: "/tmp/shots/d-wirtschaft.png", fullPage: true });
-  await p.goto(base + "/auswertungen/leerstand"); await p.fill("input[type=month] >> nth=0", "2026-01"); await p.fill("input[type=month] >> nth=1", "2026-01");
+  await p.goto(base + "/auswertungen/leerstand"); await p.fill("input[data-kind=month] >> nth=0", "2026-01"); await p.fill("input[data-kind=month] >> nth=1", "2026-01");
   await p.waitForSelector("[data-testid=phys]"); await p.waitForTimeout(500);
   console.log("Leerstand physisch:", await p.textContent("[data-testid=phys]"), "wirtschaftlich:", await p.textContent("[data-testid=econ]"));
   await p.screenshot({ path: "/tmp/shots/d-leerstand.png", fullPage: true });

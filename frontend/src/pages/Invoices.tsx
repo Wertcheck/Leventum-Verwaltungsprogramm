@@ -2,7 +2,7 @@ import { useState } from "react";
 import { api, ApiError, upload } from "../lib/api";
 import { dateDe, eur, useFetch } from "../lib/hooks";
 import { Badge, Card, EmptyState, PageHeader } from "../components/ui";
-import { Field, Modal, Select, Text } from "../components/Form";
+import { Field, FileInput, Modal, Select, Text } from "../components/Form";
 
 interface Inv { id: number; property_id: number; invoice_number: string | null; invoice_date: string; amount: string; open_amount: string | null; status: string; description: string | null; supplier_party_id: number | null }
 const ST: Record<string, [string, "ok" | "warn" | "err"]> = { open: ["Offen", "warn"], partial: ["Teilweise bezahlt", "warn"], paid: ["Bezahlt", "ok"], voided: ["Storniert", "err"] };
@@ -36,7 +36,7 @@ export default function InvoicesPage() {
         <Field label="Lieferant"><Select value={f.supplier ?? ""} onChange={set("supplier")} empty="– keiner –" options={(sup.data?.items ?? []).map((p) => ({ value: p.id, label: p.display_name }))} /></Field>
         <Field label="Rechnungsnummer"><Text value={f.number ?? ""} onChange={set("number")} /></Field><Field label="Rechnungsdatum"><Text type="date" value={f.date ?? ""} onChange={set("date")} /></Field>
         <Field label="Betrag (€)"><Text value={f.amount ?? ""} onChange={set("amount")} /></Field><Field label="Beschreibung"><Text value={f.desc ?? ""} onChange={set("desc")} /></Field>
-        <Field label="Beleg (PDF, Bild)"><input className="field" type="file" onChange={(e) => setFile(e.target.files?.[0] ?? null)} aria-label="Belegdatei" /></Field>
+        <Field label="Beleg (PDF, Bild)"><FileInput file={file} onFile={setFile} ariaLabel="Belegdatei" /></Field>
         <div className="full">{err && <div className="alert err">{err}</div>}<button className="btn primary" onClick={save}>Speichern</button></div></div></Modal>}
     </>
   );

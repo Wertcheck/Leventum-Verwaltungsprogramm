@@ -2,7 +2,7 @@ import { useState } from "react";
 import { api, ApiError, upload } from "../lib/api";
 import { dateDe, eur, useFetch } from "../lib/hooks";
 import { Badge, Card, EmptyState, PageHeader } from "../components/ui";
-import { Field, Select } from "../components/Form";
+import { Field, FileInput, Select } from "../components/Form";
 import { useDialogs } from "../components/Dialogs";
 
 interface Sugg { kind: string; score: number; reasons: string[]; lease_id?: number; lease_label?: string; invoice_id?: number; invoice_label?: string; deposit_id?: number; deposit_kind?: string; allocations?: { charge_id?: number; invoice_id?: number; amount: string }[]; unallocated_remainder?: string }
@@ -54,7 +54,7 @@ export default function BankPage() {
         {accounts.data && accounts.data.items.length === 0 && <div className="toolbar"><input className="field" placeholder="Name des Bankkontos" value={newAcc} onChange={(e) => setNewAcc(e.target.value)} aria-label="Kontoname" /><button className="btn" onClick={async () => { await api("/bank/accounts", { method: "POST", json: { name: newAcc } }); accounts.reload(); }}>Konto anlegen</button></div>}
         <div className="form-grid">
           <Field label="Bankkonto"><Select value={acc} onChange={setAcc} empty="– wählen –" options={(accounts.data?.items ?? []).map((a) => ({ value: a.id, label: a.name }))} /></Field>
-          <Field label="CSV-Datei"><input className="field" type="file" accept=".csv,text/csv" onChange={(e) => { setFile(e.target.files?.[0] ?? null); setPrev(null); }} aria-label="CSV-Datei" /></Field>
+          <Field label="CSV-Datei"><FileInput file={file} accept=".csv,text/csv" onFile={(f) => { setFile(f); setPrev(null); }} ariaLabel="CSV-Datei" /></Field>
           <div className="full toolbar"><button className="btn" disabled={!acc || !file} onClick={doPreview}>Prüfen (Vorschau)</button><button className="btn primary" disabled={!prev || prev.errors.length > 0} onClick={doImport}>Importieren</button></div>
         </div>
         {prev && <div className={`alert ${prev.errors.length ? "err" : "ok"}`}>{prev.errors.length ? <>Datei enthält Fehler und kann nicht importiert werden:<ul>{prev.errors.slice(0, 10).map((e, i) => <li key={i}>Zeile {e.row}: {e.message}</li>)}</ul></> : `${prev.total_rows} Zeilen: ${prev.new_rows} neu, ${prev.duplicate_rows} bereits importiert.${prev.file_already_imported ? " Diese Datei wurde schon einmal importiert." : ""}`}</div>}

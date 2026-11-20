@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError, type BackupList, type DashboardData, type Kpi, type User } from "../lib/api";
 import { Link } from "react-router-dom";
 import { PHASE } from "../components/TenantPanel";
-import { Badge, Card, EmptyState, KpiCard, PageHeader } from "../components/ui";
+import { Badge, Block, EmptyState, KpiCard, PageHeader } from "../components/ui";
+import { Field, Text } from "../components/Form";
+import { DETAILS, DetailPopup } from "../components/DashboardDetail";
 import { eur, isoDe, todayIso } from "../lib/hooks";
 import { Icons } from "../components/icons";
 
@@ -39,6 +41,8 @@ export default function Dashboard({ user }: { user: User }) {
   const [eco, setEco] = useState<{ soll: Record<string, string>; ist: Record<string, string>; offen_zum_stichtag: Record<string, string>; vacancy: { economic_vacancy_cost: string }; contribution: { soll_basis: string; ist_basis: string } } | null>(null);
   const [tenants, setTenants] = useState<{ party_id: number; name: string; spaces?: string[]; lease_status?: string }[]>([]);
   const [asOf, setAsOf] = useState(""), [pickerOk, setPickerOk] = useState(false), [dateMsg, setDateMsg] = useState("");
+  const [detail, setDetail] = useState<string | null>(null);  // geöffnete Detailansicht (Popup)
+  const closeDetail = useCallback(() => setDetail(null), []);
   const seq = useRef(0), today = todayIso();
   const load = useCallback((as: string) => {
     const n = ++seq.current;  // späte Antworten älterer Anfragen verwerfen
@@ -54,7 +58,7 @@ export default function Dashboard({ user }: { user: User }) {
   const hist = data?.stichtag?.mode === "historical";
   const kpis = useMemo(() => orderKpis(data?.kpis ?? []), [data]);
   useEffect(() => {
-    api<{ items: typeof tenants }>("/tenants").then((r) => setTenants(r.items.slice(0, 5))).catch(() => undefined);
+    api<{ items: typeof tenants }>("/tenants").then((r) => setTenants(r.items.slice(0, 10))).catch(() => undefined);
     const n = new Date(), m = `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}`;
     api<NonNullable<typeof eco>>(`/economics?start=${m}-01&end=${m}-${String(new Date(n.getFullYear(), n.getMonth() + 1, 0).getDate()).padStart(2, "0")}&scope=portfolio`).then(setEco).catch(() => undefined);
     api<BackupList>("/system/backups").then(setBackup).catch(() => undefined);
@@ -63,7 +67,7 @@ export default function Dashboard({ user }: { user: User }) {
     <>
       <PageHeader title={`Guten Tag, ${user.display_name}`} subtitle="Hier finden Sie alle wichtigen Informationen zu Ihren Mietern und Objekten." />
       {pickerOk && <div className="toolbar stichtag-bar" data-testid="stichtag-picker">
-        <label>Auswertung zum Stichtag<input id="stichtag-input" className="field" type="date" max={today} value={asOf || today} onChange={(e) => pick(e.target.value)} /></label>
+        <Field label="Auswertung zum Stichtag"><Text type="date" id="stichtag-input" max={today} value={asOf || today} onChange={pick} /></Field>
         <button className="btn" disabled={!asOf} onClick={() => { setDateMsg(""); setAsOf(""); }}>Heute</button>
       </div>}
       {dateMsg && <div className="alert err" role="alert" data-testid="stichtag-msg">{dateMsg}</div>}
@@ -77,18 +81,17 @@ export default function Dashboard({ user }: { user: User }) {
         {kpis.map((k) => {
           const I = Icons[ICONS[k.key] ?? "home"];
           const current = hist && k.historical_supported === false;
-          return <KpiCard key={k.key} icon={<I size={28} />} label={k.label} value={k.value} available={k.available} format={k.format} definition={k.definition} hint={k.available ? k.hint : (k.hint ?? "derzeit nicht verfügbar")}
-            badge={current ? "aktueller Stand" : undefined} badgeTitle={current ? "Diese Kennzahl wird nicht historisch berechnet und zeigt den heutigen Stand, nicht den gewählten Stichtag." : undefined} />;
+          return <KpiCard key={k.key} icon={<I size={26} />} label={k.label} value={k.value} available={k.available} format={k.format} definition={k.definition} hint={k.available ? k.hint : (k.hint ?? "derzeit nicht verfügbar")}
+            badge={current ? "aktueller Stand" : undefined} badgeTitle={current ? "Diese Kennzahl wird nicht historisch berechnet und zeigt den heutigen Stand, nicht den gewählten Stichtag." : undefined}
+            onOpen={DETAILS[k.key] ? () => setDetail(k.key) : undefined} />;
         })}
       </div>
-      <div className="grid two-col">
-        <Card>
-          <div className="card-head"><h2>Mieter</h2></div>
+      <div className="dash-row">
+        <Block title="Mieter" onOpen={() => setDetail("tenants")}>
           {tenants.length === 0 ? <EmptyState title="Noch keine Mieter erfasst">Mieter legen Sie unter „Stammdaten → Mieter“ an.</EmptyState> : (
-            <table><tbody>{tenants.map((t, i) => <tr key={i}><td><Link className="link" to={`/parteien/${t.party_id}`}>{t.name}</Link></td><td>{t.spaces?.join("; ") ?? "–"}</td><td>{t.lease_status && <Badge tone={PHASE[t.lease_status]?.[1] ?? "warn"}>{PHASE[t.lease_status]?.[0] ?? t.lease_status}</Badge>}</td></tr>)}</tbody></table>)}
-        </Card>
-        <Card>
-          <div className="card-head"><h2>Aufgaben &amp; Hinweise</h2></div>
+            <table className="dash-table"><tbody>{tenants.map((t, i) => <tr key={i}><td><Link className="link" to={`/parteien/${t.party_id}`}>{t.name}</Link></td><td>{t.spaces?.join("; ") ?? "–"}</td><td className="status-cell">{t.lease_status && <Badge tone={PHASE[t.lease_status]?.[1] ?? "warn"}>{PHASE[t.lease_status]?.[0] ?? t.lease_status}</Badge>}</td></tr>)}</tbody></table>)}
+        </Block>
+        <Block title="Aufgaben & Hinweise" onOpen={() => setDetail("tasks")}>
           {backup && backup.stale && (
             <div className="alert warn">{backup.last_backup_at ? `Das letzte Backup ist ${Math.round(backup.age_hours ?? 0)} Stunden alt.` : "Es wurde noch kein Backup erstellt."} Unter „Einstellungen“ ein Backup anlegen.</div>
           )}
@@ -100,24 +103,22 @@ export default function Dashboard({ user }: { user: User }) {
               <div className="grow"><div>{w.title}</div><div className="muted">{w.detail}</div></div>
               {w.task_id ? <Link className="link" to="/aufgaben">Aufgabe #{w.task_id}</Link> : <button className="btn small" onClick={async () => { await api("/reminders/task", { method: "POST", json: { key: w.key } }); load(asOf); }}>Aufgabe erstellen</button>}
             </div>))}
-          {data && data.tasks.length > 0 && <><h2 style={{ margin: "16px 0 8px" }}>Nächste Aufgaben</h2>{data.tasks.map((t) => <div className="list-row" key={t.id}><span className="grow">{t.title}</span><span className="muted">{t.due_date ?? "ohne Termin"}</span>{t.overdue && <Badge tone="err">überfällig</Badge>}</div>)}</>}
-        </Card>
+          {data && data.tasks.length > 0 && <><h3 className="block-sub-title">Nächste Aufgaben</h3>{data.tasks.map((t) => <div className="list-row" key={t.id}><span className="grow">{t.title}</span><span className="muted nowrap">{t.due_date ? isoDe(t.due_date) : "ohne Termin"}</span>{t.overdue && <Badge tone="err">überfällig</Badge>}</div>)}</>}
+        </Block>
       </div>
-      {eco && <Card>
-        <div className="card-head"><h2>Wirtschaftlicher Überblick</h2><span className="muted">{hist ? "aktueller Stand (laufender Monat, nicht zum Stichtag)" : "laufender Monat"} · vorläufig</span></div>
-        <>
-          <div className="stat-grid">
-            <div className="stat"><div className="k">Untermiete (Soll)</div><div className="v">{eur(eco.soll.sub_total)}</div></div>
-            <div className="stat"><div className="k">Hauptmiete (Soll)</div><div className="v">{eur(eco.soll.main_total)}</div></div>
-            <div className="stat"><div className="k">Vorläufiger Deckungsbeitrag (Soll)</div><div className={`v ${Number(eco.contribution.soll_basis) < 0 ? "neg" : ""}`}>{eur(eco.contribution.soll_basis)}</div></div>
-            <div className="stat"><div className="k">Zahlungsfluss (Ist: Eingänge − Ausgänge)</div><div className={`v ${Number(eco.contribution.ist_basis) < 0 ? "neg" : ""}`}>{eur(eco.contribution.ist_basis)}</div></div>
-            <div className="stat"><div className="k">Offene Forderungen</div><div className="v">{eur(eco.offen_zum_stichtag.receivables)}</div></div>
-            <div className="stat"><div className="k">davon überfällig (Rückstand)</div><div className={`v ${Number(eco.offen_zum_stichtag.receivables_overdue) > 0 ? "neg" : ""}`}>{eur(eco.offen_zum_stichtag.receivables_overdue)}</div></div>
-            <div className="stat"><div className="k">Wirtschaftlicher Leerstand</div><div className="v">{eur(eco.vacancy.economic_vacancy_cost)}</div></div>
-          </div>
-          <p className="muted">Soll (laut Verträgen) und Ist (tatsächliche Zahlungen) sind getrennte Betrachtungen und nicht addierbar; der Deckungsbeitrag ist vorläufig und kein Gewinn. Details unter <Link className="link" to="/auswertungen/wirtschaftlichkeit">Auswertungen → Wirtschaftlichkeit</Link>.</p>
-        </>
-      </Card>}
+      {eco && <Block title="Wirtschaftlicher Überblick" subtitle={`${hist ? "aktueller Stand (laufender Monat, nicht zum Stichtag)" : "laufender Monat"} · vorläufig`} onOpen={() => setDetail("economics")}>
+        <div className="stat-grid">
+          <div className="stat"><div className="k">Untermiete (Soll)</div><div className="v">{eur(eco.soll.sub_total)}</div></div>
+          <div className="stat"><div className="k">Hauptmiete (Soll)</div><div className="v">{eur(eco.soll.main_total)}</div></div>
+          <div className="stat"><div className="k">Vorläufiger Deckungsbeitrag (Soll)</div><div className={`v ${Number(eco.contribution.soll_basis) < 0 ? "neg" : ""}`}>{eur(eco.contribution.soll_basis)}</div></div>
+          <div className="stat"><div className="k">Zahlungsfluss (Ist: Eingänge − Ausgänge)</div><div className={`v ${Number(eco.contribution.ist_basis) < 0 ? "neg" : ""}`}>{eur(eco.contribution.ist_basis)}</div></div>
+          <div className="stat"><div className="k">Offene Forderungen</div><div className="v">{eur(eco.offen_zum_stichtag.receivables)}</div></div>
+          <div className="stat"><div className="k">davon überfällig (Rückstand)</div><div className={`v ${Number(eco.offen_zum_stichtag.receivables_overdue) > 0 ? "neg" : ""}`}>{eur(eco.offen_zum_stichtag.receivables_overdue)}</div></div>
+          <div className="stat"><div className="k">Wirtschaftlicher Leerstand</div><div className="v">{eur(eco.vacancy.economic_vacancy_cost)}</div></div>
+        </div>
+        <p className="muted">Soll (laut Verträgen) und Ist (tatsächliche Zahlungen) sind getrennte Betrachtungen und nicht addierbar; der Deckungsbeitrag ist vorläufig und kein Gewinn. Details unter <Link className="link" to="/auswertungen/wirtschaftlichkeit">Auswertungen → Wirtschaftlichkeit</Link>.</p>
+      </Block>}
+      {detail && <DetailPopup detail={detail} onClose={closeDetail} />}
     </>
   );
 }

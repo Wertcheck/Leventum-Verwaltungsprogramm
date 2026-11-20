@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { api, ApiError, type StichtagMeta } from "../lib/api";
-import { dateDe, eur, useFetch } from "../lib/hooks";
+import { dateDe, eur, monthDe, useFetch } from "../lib/hooks";
 import { Badge, Card, EmptyState, PageHeader, StichtagLine } from "../components/ui";
 import { Field, Modal, Select, Text } from "../components/Form";
 import { useDialogs } from "../components/Dialogs";
@@ -42,7 +42,7 @@ export default function FinancePage() {
         <StichtagLine stichtag={charges.data?.stichtag} />
         {charges.data && charges.data.items.length === 0 ? <EmptyState title="Keine Sollstellungen" /> : (
           <table><thead><tr><th>Vertrag</th><th>Art</th><th>Monat</th><th>Fällig</th><th>Betrag</th><th>Offen</th><th>Status</th></tr></thead>
-            <tbody>{charges.data?.items.map((c) => <tr key={c.id}><td><Link className="link" to={`/vertraege/${c.lease_id}`}>{c.lease_label}</Link><div className="muted">{c.direction === "receivable" ? "Forderung gegen Mieter" : "Verbindlichkeit an Vermieter"}</div></td><td>{CHARGE_LABEL[c.charge_type]}</td><td>{c.period_start.slice(0, 7)}</td><td>{dateDe(c.due_date)}</td><td>{eur(c.amount)}</td><td>{eur(c.open_amount)}</td><td><Badge tone={ST[c.status][1]}>{ST[c.status][0]}</Badge></td></tr>)}</tbody></table>)}
+            <tbody>{charges.data?.items.map((c) => <tr key={c.id}><td><Link className="link" to={`/vertraege/${c.lease_id}`}>{c.lease_label}</Link><div className="muted">{c.direction === "receivable" ? "Forderung gegen Mieter" : "Verbindlichkeit an Vermieter"}</div></td><td>{CHARGE_LABEL[c.charge_type]}</td><td>{monthDe(c.period_start)}</td><td>{dateDe(c.due_date)}</td><td>{eur(c.amount)}</td><td>{eur(c.open_amount)}</td><td><Badge tone={ST[c.status][1]}>{ST[c.status][0]}</Badge></td></tr>)}</tbody></table>)}
       </Card>
       <div style={{ height: 20 }} />
       <Card>
@@ -75,7 +75,7 @@ export default function FinancePage() {
         <Field label="Buchungsdatum"><Text type="date" value={f.date ?? ""} onChange={set("date")} /></Field>
         <Field label="Betrag (€)"><Text value={f.amount ?? ""} onChange={set("amount")} placeholder="1370.00" /></Field>
         <Field label="Verwendungszweck"><Text value={f.ref ?? ""} onChange={set("ref")} /></Field>
-        <Field label="Sollstellung zuordnen (optional)"><Select value={f.charge ?? ""} onChange={set("charge")} empty="– nicht zuordnen –" options={(charges.data?.items ?? []).filter((c) => c.status === "open" || c.status === "partial").filter((c) => (c.direction === "receivable") === (f.direction === "in")).map((c) => ({ value: c.id, label: `${c.lease_label} – ${CHARGE_LABEL[c.charge_type]} ${c.period_start.slice(0, 7)} – offen ${eur(c.open_amount)}` }))} /></Field>
+        <Field label="Sollstellung zuordnen (optional)"><Select value={f.charge ?? ""} onChange={set("charge")} empty="– nicht zuordnen –" options={(charges.data?.items ?? []).filter((c) => c.status === "open" || c.status === "partial").filter((c) => (c.direction === "receivable") === (f.direction === "in")).map((c) => ({ value: c.id, label: `${c.lease_label} – ${CHARGE_LABEL[c.charge_type]} ${monthDe(c.period_start)} – offen ${eur(c.open_amount)}` }))} /></Field>
         <div className="full"><button className="btn primary" onClick={() => run(() => api("/payments", { method: "POST", json: { direction: f.direction, booking_date: f.date, amount: f.amount, reference: f.ref || null, allocations: f.charge ? [{ charge_id: Number(f.charge), amount: f.amount }] : [] } }), "Zahlung erfasst.")}>Speichern</button></div></div></Modal>}
     </>
   );

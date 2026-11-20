@@ -7,6 +7,9 @@ import { Field, Modal, Select, Text } from "../components/Form";
 import EditDialog from "../components/EditDialog";
 import TenantPanel, { PHASE } from "../components/TenantPanel";
 
+/** Rollen der Stammdaten in deutscher Anzeige (Rohwerte des Backends nie direkt zeigen). */
+export const ROLE_DE: Record<string, string> = { owner: "Eigentümer", landlord: "Vermieter", tenant: "Mieter", service_provider: "Dienstleister" };
+const roleDe = (roles: string[]) => roles.map((r) => ROLE_DE[r] ?? r).join(", ");
 interface Party { id: number; display_name: string; kind: string; email: string | null; phone: string | null; city: string | null; roles: string[]; is_active: boolean }
 interface TenantRow { party_id: number; name: string; lease_id: number | null; lease_status?: string; spaces?: string[]; start_date?: string; end_date?: string | null; monthly_total?: { available: boolean; total?: string } | null; payment_status?: string | null; overdue_amount?: string | null; last_activity: string | null }
 const STATUS: Record<string, [string, "ok" | "warn" | "err"]> = { active: ["Aktiv", "ok"], terminated: ["Kündigung", "warn"], ended: ["Beendet", "err"], draft: ["Entwurf", "warn"] };
@@ -89,7 +92,7 @@ export function OwnersPage() {
         <div className="toolbar"><div className="grow" /><button className="btn primary" onClick={() => setOpen(true)}>Eigentümer anlegen</button></div>
         {items.length === 0 ? <EmptyState title="Keine Eigentümer">Legen Sie den ersten Eigentümer an.</EmptyState> : (
           <table><thead><tr><th>Name</th><th>Rollen</th><th>Ort</th><th>E-Mail</th></tr></thead>
-            <tbody>{items.map((p) => <tr key={p.id} className="row-link" onClick={() => nav(`/parteien/${p.id}`)}><td><strong>{p.display_name}</strong></td><td>{p.roles.join(", ")}</td><td>{p.city ?? "–"}</td><td>{p.email ?? "–"}</td></tr>)}</tbody></table>)}
+            <tbody>{items.map((p) => <tr key={p.id} className="row-link" onClick={() => nav(`/parteien/${p.id}`)}><td><strong>{p.display_name}</strong></td><td>{roleDe(p.roles)}</td><td>{p.city ?? "–"}</td><td>{p.email ?? "–"}</td></tr>)}</tbody></table>)}
       </Card>
       {open && <Modal title="Eigentümer anlegen" onClose={() => setOpen(false)}><PartyForm role="owner" onDone={() => { setOpen(false); owners.reload(); landlords.reload(); }} /></Modal>}
     </>
@@ -105,7 +108,7 @@ export function PartyDetail() {
   if (!data) return null;
   return (
     <>
-      <PageHeader title={data.display_name} subtitle={data.roles.join(", ")} />
+      <PageHeader title={data.display_name} subtitle={roleDe(data.roles)} />
       <div className="toolbar"><button className="btn" onClick={() => setEditing(true)}>Stammdaten bearbeiten</button></div>
       {editing && <EditDialog title="Stammdaten bearbeiten" path={`/parties/${data.id}`} initial={data as unknown as Record<string, unknown>} onClose={() => setEditing(false)} onSaved={reload}
         note="Änderungen werden mit Vorher/Nachher im Protokoll festgehalten (IBAN und Geburtsdatum maskiert)."

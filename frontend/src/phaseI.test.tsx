@@ -7,7 +7,7 @@ import Dashboard, { orderKpis } from "./pages/Dashboard";
 import { TenantsPage } from "./pages/Parties";
 import FinancePage from "./pages/Finance";
 import { RepairDetail, RepairsPage } from "./pages/Repairs";
-import { todayIso } from "./lib/hooks";
+import { isoDe, todayIso } from "./lib/hooks";
 
 const render = (ui: ReactElement) => rtlRender(<MemoryRouter>{ui}</MemoryRouter>, { wrapper: DialogProvider });
 type Reply = unknown | { __status: number; body: unknown };
@@ -76,7 +76,7 @@ describe("Dashboard Stichtag", () => {
     expect(label("Offene Forderungen").closest(".kpi")?.querySelector(".kpi-badge")).toBeNull();
     fireEvent.click(screen.getByText("Heute"));
     await waitFor(() => expect(screen.queryByTestId("stichtag-banner")).toBeNull());
-    expect((screen.getByLabelText("Auswertung zum Stichtag") as HTMLInputElement).value).toBe(todayIso());
+    expect((screen.getByLabelText("Auswertung zum Stichtag") as HTMLInputElement).value).toBe(isoDe(todayIso()));  // einheitlich TT.MM.JJJJ
     expect(document.querySelector(".kpi-badge")).toBeNull();
   });
 

@@ -37,7 +37,7 @@ const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR
   await p.click("button:has-text('Aufgabe erstellen') >> nth=0"); await p.waitForSelector("text=/Aufgabe #\\d+/"); ok("Aus Erinnerung Aufgabe erzeugt (Button wird zum Link)");
   // --- Aufgaben ---
   await p.goto(base + "/aufgaben"); await p.waitForSelector("td strong");
-  await p.click("text=Aufgabe anlegen"); await p.fill(".modal input.field >> nth=0", "Treppenhaus reinigen lassen"); await p.fill(".modal input[type=date]", "2020-01-01"); await p.click(".modal button.primary");
+  await p.click("text=Aufgabe anlegen"); await p.fill(".modal input.field >> nth=0", "Treppenhaus reinigen lassen"); await p.fill(".modal input[data-kind=date]", "2020-01-01"); await p.click(".modal button.primary");
   await p.waitForSelector("td:has-text('Treppenhaus reinigen lassen')"); await p.waitForSelector("text=überfällig"); ok("Manuelle Aufgabe, überfällig markiert");
   await p.check("input[type=checkbox]"); await p.waitForFunction(() => document.querySelectorAll("tbody tr").length === 1); ok("Filter 'nur überfällige'"); await p.uncheck("input[type=checkbox]");
   await p.selectOption("select[aria-label='Status Treppenhaus reinigen lassen']", "done"); await p.waitForFunction(() => document.querySelector("select[aria-label='Status Treppenhaus reinigen lassen']")?.value === "done"); ok("Status auf erledigt");
@@ -61,7 +61,7 @@ const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR
   await p.goto(base + `/vertraege/${sub.id}`); await p.waitForSelector("text=Fehlende Dokumente");
   console.log("Fehlend:", await p.textContent(".alert.warn:has-text('Fehlende Dokumente')"));
   await p.setInputFiles("input[aria-label='Dokument hochladen']", { name: "Mietvertrag.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4 mv") }); await p.waitForSelector("a:has-text('Mietvertrag.pdf')");
-  await p.click("text=+ Protokoll"); await p.fill(".modal input[type=date]", "2026-01-01"); await p.fill(".modal input.field >> nth=1", "3"); await p.click(".modal button.primary"); await p.waitForSelector("text=Einzug");
+  await p.click("text=+ Protokoll"); await p.fill(".modal input[data-kind=date]", "2026-01-01"); await p.fill(".modal input.field >> nth=1", "3"); await p.click(".modal button.primary"); await p.waitForSelector("text=Einzug");
   await p.reload(); await p.waitForSelector("text=Übergabeprotokolle"); await p.waitForTimeout(600);
   console.log("Fehlende-Dokumente-Hinweis nach Upload+Protokoll:", await p.locator("text=Fehlende Dokumente").count()); ok("Vertrag: Dokument + Übergabeprotokoll → Pflichtliste erfüllt");
   // --- Dokumente-Seite ---
