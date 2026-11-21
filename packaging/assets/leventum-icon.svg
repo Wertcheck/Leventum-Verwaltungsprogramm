@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Leventum Icon</title>
+  <desc id="desc">Das Leventum-Haussymbol ohne Schriftzug.</desc>
+  <path d="M 104 430 V 190 L 256 66 L 386 172"
+        fill="none" stroke="#27446c" stroke-width="38"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M 104 430 H 430"
+        fill="none" stroke="#27446c" stroke-width="38"
+        stroke-linecap="round"/>
+</svg>

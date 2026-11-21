@@ -53,6 +53,37 @@ def _ensure_streams(log_dir: Path) -> None:
     sys.stderr = sys.stderr or f
 
 
+def _light_titlebar(hwnd: int, api=None) -> None:
+    """Windows-Titelleiste hell (weiß), ohne Titeltext und ohne Fenstersymbol. Rein optisch; jeder Fehler wird ignoriert (Start darf daran nie scheitern).
+    `api` ist nur für Tests austauschbar. Unter Windows 10 wirkt nur der helle Modus, die Captionfarbe erst ab Windows 11. NICHT unter Windows getestet."""
+    try:
+        if api is None:
+            if sys.platform != "win32":
+                return
+            import ctypes
+            api = type("Api", (), {"user32": ctypes.windll.user32, "dwm": ctypes.windll.dwmapi, "c_int": ctypes.c_int, "byref": ctypes.byref})
+        def attr(a: int, v: int) -> None:
+            val = api.c_int(v)
+            api.dwm.DwmSetWindowAttribute(hwnd, a, api.byref(val), 4)
+        attr(20, 0)            # DWMWA_USE_IMMERSIVE_DARK_MODE aus -> helle Titelleiste
+        attr(35, 0x00FFFFFF)   # DWMWA_CAPTION_COLOR = weiß (Windows 11)
+        attr(36, 0x00000000)   # DWMWA_TEXT_COLOR = schwarz (Fenstertasten)
+        api.user32.SetWindowTextW(hwnd, "")  # kein Titeltext
+        ex = api.user32.GetWindowLongW(hwnd, -20)
+        api.user32.SetWindowLongW(hwnd, -20, ex | 0x0001)  # WS_EX_DLGMODALFRAME: kein Fenstersymbol in der Titelleiste
+        api.user32.SetWindowPos(hwnd, 0, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0004 | 0x0020)  # NOSIZE|NOMOVE|NOZORDER|FRAMECHANGED
+    except Exception:  # noqa: BLE001 – rein kosmetisch
+        pass
+
+
+def _style_window(window) -> None:
+    """Wird nach dem Anzeigen des Fensters aufgerufen (Windows/WinForms)."""
+    try:
+        _light_titlebar(int(window.native.Handle.ToInt64()))
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def _wait_healthy(url: str, tries: int = 300) -> bool:
     """Health-Check bewusst OHNE Systemproxy (Loopback darf nie über einen Proxy laufen)."""
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
@@ -168,6 +199,10 @@ def main(argv: list[str] | None = None) -> None:
     holder: dict = {}
     if work:
         window = webview.create_window("Leventum Verwaltung (Demo)", html=_SPLASH, width=1536, height=1024, min_size=(1100, 700))
+        try:
+            window.events.shown += lambda: _style_window(window)
+        except Exception:  # noqa: BLE001
+            pass
 
         def _prepare() -> None:  # Hintergrund-Thread: Meldung steht schon im Fenster; Fehler werden angezeigt und geloggt (kein stilles Hängen)
             try:
@@ -184,7 +219,11 @@ def main(argv: list[str] | None = None) -> None:
         # Daemon-Thread: ein Schließen des Fensters während des Seedings hält den Prozess nicht fest
         webview.start(lambda: threading.Thread(target=_prepare, daemon=True).start())
     else:
-        webview.create_window("Leventum Verwaltung", window_url, width=1536, height=1024, min_size=(1100, 700))
+        window = webview.create_window("Leventum Verwaltung", window_url, width=1536, height=1024, min_size=(1100, 700))
+        try:
+            window.events.shown += lambda: _style_window(window)
+        except Exception:  # noqa: BLE001 – ältere pywebview-Version
+            pass
         webview.start()
     _shutdown(holder, server)
 

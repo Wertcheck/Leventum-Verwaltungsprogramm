@@ -164,3 +164,42 @@ def test_password_with_leading_dash_is_accepted_by_demo_cli(isolated_env, tmp_pa
     with pytest.raises(SystemExit) as e:
         demo_mod.main(["--data-dir", str(f), "--no-serve", "--password=-abcdefghijklmnop"])
     assert isinstance(e.value.code, str)
+
+
+def test_light_titlebar_sets_white_caption_without_title_and_icon():
+    """Titelleiste hell, ohne Titeltext/Symbol – geprüft mit einer Attrappe der Windows-API (kein Windows-Test)."""
+    from types import SimpleNamespace
+
+    from leventum import desktop
+
+    calls: list = []
+
+    class User32:
+        def SetWindowTextW(self, h, t): calls.append(("title", h, t))
+        def GetWindowLongW(self, h, i): calls.append(("getlong", i)); return 0x100
+        def SetWindowLongW(self, h, i, v): calls.append(("setlong", i, v))
+        def SetWindowPos(self, *a): calls.append(("pos",) + a)
+
+    class Dwm:
+        def DwmSetWindowAttribute(self, h, a, ref, size): calls.append(("dwm", a, ref.value, size))
+
+    class Val:
+        def __init__(self, v): self.value = v
+
+    api = SimpleNamespace(user32=User32(), dwm=Dwm(), c_int=Val, byref=lambda v: v)
+    desktop._light_titlebar(1234, api)
+    assert ("dwm", 20, 0, 4) in calls                  # kein dunkler Modus
+    assert ("dwm", 35, 0x00FFFFFF, 4) in calls         # weiße Titelleiste
+    assert ("title", 1234, "") in calls                # kein Titeltext
+    assert ("setlong", -20, 0x101) in calls            # Fenstersymbol aus (DLGMODALFRAME)
+
+
+def test_light_titlebar_never_raises():
+    from types import SimpleNamespace
+
+    from leventum import desktop
+
+    def boom(*a, **k): raise OSError("x")
+    desktop._light_titlebar(1, SimpleNamespace(user32=SimpleNamespace(), dwm=SimpleNamespace(DwmSetWindowAttribute=boom), c_int=int, byref=lambda v: v))
+    desktop._light_titlebar(1)  # unter Linux ohne Wirkung
+    desktop._style_window(SimpleNamespace())  # Fenster ohne native-Handle: ignoriert

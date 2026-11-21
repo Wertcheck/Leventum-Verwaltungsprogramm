@@ -265,3 +265,15 @@ describe("Nachbesserungen nach unabhängiger Prüfung", () => {
     expect(f.type).toBe("text");
   });
 });
+
+describe("Anzeigename des Benutzers", () => {
+  it("Begrüßung und Menü zeigen den Profilnamen, ohne Profilnamen den Benutzernamen", async () => {
+    const { userName } = await import("./lib/api");
+    expect(userName({ username: "jb", display_name: "James" })).toBe("James");
+    expect(userName({ username: "jb", display_name: "  " })).toBe("jb");
+    expect(userName({ username: "jb", display_name: "" })).toBe("jb");
+    mockApi((u) => (u.includes("/dashboard") ? { kpis: [], warnings: [], tasks: [], stichtag: { view: "dashboard", mode: "current", as_of: todayIso(), historical_supported: true, historical_available: true, limitations: [] } } : { items: [], last_backup_at: null, stale: false }));
+    render(<Dashboard user={{ id: 1, username: "jb", display_name: "", role: "admin" }} />);
+    expect(await screen.findByRole("heading", { level: 1, name: "Guten Tag, jb" })).toBeTruthy();
+  });
+});

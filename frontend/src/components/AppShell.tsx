@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
-import { api } from "../lib/api";
+import { api, userName } from "../lib/api";
 import { Icons } from "./icons";
 import { NAV, isGroup } from "../nav";
 import type { User } from "../lib/api";
@@ -70,8 +70,8 @@ function Topbar({ user, onLogout, navOpen, onToggleNav }: { user: User; onLogout
       <GlobalSearch />
       <button className="icon-btn" aria-label="Benachrichtigungen" title="Keine Benachrichtigungen"><Icons.bell size={26} /></button>
       <div className="user-menu" onClick={() => setMenu(!menu)} role="button" tabIndex={0} aria-haspopup="menu" aria-expanded={menu}>
-        <div className="avatar">{user.display_name.slice(0, 1).toUpperCase()}</div>
-        <span>{user.display_name}</span><Icons.chevronDown size={18} />
+        <div className="avatar">{userName(user).slice(0, 1).toUpperCase()}</div>
+        <span>{userName(user)}</span><Icons.chevronDown size={18} />
         {menu && <div className="menu" role="menu"><button role="menuitem" onClick={onLogout}>Abmelden</button></div>}
       </div>
     </header>

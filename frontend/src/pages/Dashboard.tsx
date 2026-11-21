@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, ApiError, type BackupList, type DashboardData, type Kpi, type User } from "../lib/api";
+import { api, ApiError, type BackupList, type DashboardData, type Kpi, type User, userName } from "../lib/api";
 import { Link } from "react-router-dom";
 import { PHASE } from "../components/TenantPanel";
 import { Badge, Block, EmptyState, KpiCard, PageHeader } from "../components/ui";
@@ -65,7 +65,7 @@ export default function Dashboard({ user }: { user: User }) {
   }, []);
   return (
     <>
-      <PageHeader title={`Guten Tag, ${user.display_name}`} subtitle="Hier finden Sie alle wichtigen Informationen zu Ihren Mietern und Objekten." />
+      <PageHeader title={`Guten Tag, ${userName(user)}`} subtitle="Hier finden Sie alle wichtigen Informationen zu Ihren Mietern und Objekten." />
       {pickerOk && <div className="toolbar stichtag-bar" data-testid="stichtag-picker">
         <Field label="Auswertung zum Stichtag"><Text type="date" id="stichtag-input" max={today} value={asOf || today} onChange={pick} /></Field>
         <button className="btn" disabled={!asOf} onClick={() => { setDateMsg(""); setAsOf(""); }}>Heute</button>

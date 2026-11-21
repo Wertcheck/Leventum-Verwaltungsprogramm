@@ -25,6 +25,7 @@ WizardStyle=modern
 CloseApplications=yes
 UninstallDisplayName=Leventum Verwaltung
 UninstallDisplayIcon={app}\Leventum.exe
+SetupIconFile=assets\leventum.ico
 
 [Languages]
 Name: "german"; MessagesFile: "compiler:Languages\German.isl"

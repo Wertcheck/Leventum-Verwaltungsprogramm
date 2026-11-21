@@ -94,7 +94,7 @@ def build_demo(data_dir: Path, password: str, today: date | None = None):
             raise RuntimeError(f"Demo-Daten: {method} {path} -> {r.status_code} {r.text[:300]}")
         return r.json()
 
-    A("POST", "/auth/setup", {"username": USERNAME, "password": password, "display_name": "Demo-Nutzer"})
+    A("POST", "/auth/setup", {"username": USERNAME, "password": password, "display_name": USERNAME})
     party = lambda kind, o, roles=(), **extra: A("POST", "/parties", {"kind": kind, **o, "roles": list(roles), **extra})  # noqa: E731
     own = party("company", {"company_name": "Leventum Real Estate GmbH"}, is_own_organization=True)
     o1 = party("person", {"first_name": "Helga", "last_name": "Brandt", "city": "Berlin"}, ["owner"], iban="DE02120300000000202051")

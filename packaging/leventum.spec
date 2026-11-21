@@ -11,6 +11,8 @@ from PyInstaller.utils.hooks import collect_submodules
 ROOT = Path(SPECPATH).parent  # noqa: F821 – von PyInstaller bereitgestellt
 BACKEND = ROOT / "backend"
 DIST = ROOT / "frontend" / "dist"
+ICON = ROOT / "packaging" / "assets" / "leventum.ico"
+assert ICON.exists(), "packaging/assets/leventum.ico fehlt"
 assert (DIST / "index.html").exists(), "frontend/dist fehlt: zuerst `npm ci && npm run build` im Ordner frontend ausführen"
 
 datas = [(str(BACKEND / "alembic.ini"), "."), (str(BACKEND / "alembic"), "alembic"), (str(DIST), "frontend_dist")]
@@ -22,6 +24,6 @@ if sys.platform == "win32":
 a = Analysis([str(ROOT / "packaging" / "entry.py")], pathex=[str(BACKEND)], datas=datas, hiddenimports=hidden,  # noqa: F821
              excludes=["tkinter", "pytest", "IPython"], noarchive=False)
 pyz = PYZ(a.pure)  # noqa: F821
-gui = EXE(pyz, a.scripts, [], exclude_binaries=True, name="Leventum", console=False, upx=False)  # noqa: F821
-srv = EXE(pyz, a.scripts, [], exclude_binaries=True, name="LeventumServer", console=True, upx=False)  # noqa: F821
+gui = EXE(pyz, a.scripts, [], exclude_binaries=True, name="Leventum", console=False, upx=False, icon=str(ICON))  # noqa: F821
+srv = EXE(pyz, a.scripts, [], exclude_binaries=True, name="LeventumServer", console=True, upx=False, icon=str(ICON))  # noqa: F821
 coll = COLLECT(gui, srv, a.binaries, a.datas, name="Leventum", upx=False)  # noqa: F821

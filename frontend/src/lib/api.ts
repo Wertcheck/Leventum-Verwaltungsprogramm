@@ -29,6 +29,8 @@ export async function upload<T = unknown>(path: string, form: FormData): Promise
 }
 
 export interface User { id: number; username: string; display_name: string; role: string }
+/** Anzeigename des angemeldeten Benutzers: Profilname, sonst Benutzername (nie ein fester Text). */
+export const userName = (u: Pick<User, "username" | "display_name">): string => (u.display_name ?? "").trim() || u.username;
 export interface Kpi { key: string; label: string; value: number | string | null; format?: string; available: boolean; planned_phase: string; definition?: string; hint?: string | null; historical_supported?: boolean }
 /** Block 'stichtag' der Antworten (Dashboard, Forderungen, Mahnwesen, Wirtschaftlichkeit). Alle Felder außer as_of optional/tolerant. */
 export interface StichtagMeta { view?: string; mode?: "current" | "historical" | "datenstand" | string; as_of: string; historical_supported?: boolean; historical_available?: boolean; limitations?: string[] }
